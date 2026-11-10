@@ -79,7 +79,7 @@ export function shortPath(path: string): string {
 // Where the user goes to answer in person: the session's name and folder.
 export function sessionWhere(session: FrontSession): string {
   const name = session.live?.name ?? session.report.sessionId.slice(0, 8)
-  return `Session "${name}" (${shortPath(session.report.cwd)})`
+  return `Session ${JSON.stringify(name)} (${shortPath(session.report.cwd)})`
 }
 
 export function drillDown(front: Front): Drill | null {

@@ -23,6 +23,7 @@ let refreshing = false
 let coordinating = false
 let lastFronts: Front[] = []
 let lastWaitingIds: string[] = []
+let refreshedOnce = false
 
 export function currentFronts(): Front[] {
   return lastFronts
@@ -58,6 +59,13 @@ async function refreshOnce($: Engine): Promise<void> {
   const panel = toView(lastFronts, now, { pr: snapshot.pr, git: snapshot.git })
   lastWaitingIds = panel.waiting.map(row => row.id)
   await setView($, panel)
+  refreshedOnce = true
+}
+
+// False until the first refresh lands: before it no session is known, so the
+// coordinator cannot tell a front's session from any other and sends nothing.
+export function hasRefreshed(): boolean {
+  return refreshedOnce
 }
 
 // One refresh at a time; a tick that finds one running is skipped. A failed

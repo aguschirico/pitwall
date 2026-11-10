@@ -2,9 +2,12 @@
 // to which session. Approvals never travel: they are answered in the session.
 // Conservative by design: a refusal costs a window switch, a wrong relay can
 // cost a push or a production change.
+// The word rule is one layer: what the model drafts also needs the user's yes
+// in a dialog (tools.ts), and the receiving session keeps its own permissions.
 import { sessionWhere } from './format'
 import type { Front, FrontSession } from './fronts'
 import { PERMISSION_PREFIX, type Waiting } from './report'
+import { foldForMatch } from './untrusted'
 
 const WORD = '[\\p{L}\\p{N}_]'
 
@@ -25,35 +28,36 @@ const APPROVAL_WORDS = [
 const STEM_PATTERN = new RegExp(`(?<!${WORD})(${APPROVAL_STEMS.join('|')})`, 'iu')
 const WORD_PATTERN = new RegExp(`(?<!${WORD})(${APPROVAL_WORDS.join('|')})(?!${WORD})`, 'iu')
 
-// The approval word in the text, as written, or null: the refusal quotes it.
+// The approval word in the text, folded (invisible characters out, lookalike
+// letters and spelled-out words read as plain ones), or null: the refusal quotes it.
 export function approvalWord(text: string): string | null {
-  return STEM_PATTERN.exec(text)?.[1] ?? WORD_PATTERN.exec(text)?.[1] ?? null
+  const folded = foldForMatch(text)
+  return STEM_PATTERN.exec(folded)?.[1] ?? WORD_PATTERN.exec(folded)?.[1] ?? null
 }
 
-export function mentionsApproval(text: string): boolean {
-  return approvalWord(text) !== null
+// Why words with an approval in them are not sent, or null. `after` says where to go instead.
+export function approvalRefusal(text: string, after = ''): string | null {
+  const word = approvalWord(text)
+  if (!word) return null
+  return `Not sent: the message says ${JSON.stringify(word)}, and push, PR, merge, deploy or prod never travel through the panel.${after}`
 }
 
-// The words an answer to a question opens with: "dale", "sí, pero…", "ok, go ahead".
-const REPLY_OPENERS = [
-  'sí', 'si', 'no', 'dale', 'ok', 'okay', 'oka', 'vale', 'listo', 'adelante', 'hazlo', 'hacelo', 'go',
-  'yes', 'yep', 'nope', 'claro', 'perfecto', 'correcto', 'confirmo', 'confirmado', 'bueno', 'genial',
-  'de una', 'sigue', 'seguí', 'continúa', 'continua',
-  'yeah', 'sure', 'fine', 'continue', 'proceed', 'do it', 'sounds good', 'approved', 'great',
-]
-const REPLY_PATTERN = new RegExp(`^\\s*(${REPLY_OPENERS.join('|')})(?!${WORD})`, 'iu')
-// A reply this short is an answer whatever it says ("ya", "la primera").
-const MIN_INSTRUCTION_WORDS = 6
+export type RelayPlan = { ok: true; sessionId: string } | { ok: false; reason: string }
 
-// Whether the words could be taken as the answer to the question the session is waiting on.
-function readsAsAnswer(text: string): boolean {
-  const words = text.trim().split(/\s+/u).filter(Boolean)
-  return words.length < MIN_INSTRUCTION_WORDS || REPLY_PATTERN.test(text)
+// Who stands behind the words: the user typed them (/coordinate), or the
+// coordinator's model drafted them and the user said yes to them in a dialog.
+export type Author = 'typed' | 'confirmed'
+
+const AUTHOR_LINE: Record<Author, string> = {
+  typed: 'Relayed from the coordinator session, typed by the user',
+  confirmed: "Relayed from the coordinator session, drafted by its model and confirmed by the user",
 }
 
-const NOT_AN_ANSWER = 'This does not answer the approval you are waiting on: that one is given in this session.'
-
-export type RelayPlan = { ok: true; sessionId: string; message: string } | { ok: false; reason: string }
+// What the receiving session reads. The words go in JSON quotes, so a quote or
+// a line break in them cannot close the envelope and speak in its voice.
+export function relayMessage(text: string, author: Author): string {
+  return `${AUTHOR_LINE[author]}: ${JSON.stringify(text)}`
+}
 
 // The session whose wait the panel shows (the oldest), else the newest open one.
 export function relayTarget(front: Front): FrontSession | null {
@@ -87,9 +91,8 @@ const WAIT_REASONS = {
   dialog: 'that session has a permission dialog open, and that is answered there',
 }
 
-// Null when the words may go; otherwise why not. A session waiting on an approval still takes a
-// new instruction, as long as nothing in it could be read as the answer: no approval words, not a
-// short reply, not opening with one ("yes, but…").
+// Null when the words may go; otherwise why not. A session waiting on an approval takes nothing
+// through the panel: any words could be read as the answer.
 export function refusal(session: FrontSession, text: string): string | null {
   const wait = session.report.state === 'waiting' ? session.report.waiting : null
   const where = sessionWhere(session)
@@ -99,9 +102,9 @@ export function refusal(session: FrontSession, text: string): string | null {
       ? `Still reading what that session asks: try again in a few seconds or answer it in ${where}.`
       : `That session does not have the mod loaded, so what it asks is unknown: answer it in ${where}, or run /reload-plugins there.`
   }
-  const word = approvalWord(text)
-  if (word) return `Not sent: your message says "${word}", and push, PR, merge, deploy or prod never travel through the panel. Say it in ${where}.`
-  if (wait !== null && asksApproval(session) && readsAsAnswer(text)) {
+  const word = approvalRefusal(text, ` Say it in ${where}.`)
+  if (word) return word
+  if (wait !== null && asksApproval(session)) {
     return `Not sent: ${isPermissionDialog(wait) ? WAIT_REASONS.dialog : WAIT_REASONS.push}. Go to ${where}.`
   }
   return null
@@ -110,13 +113,8 @@ export function refusal(session: FrontSession, text: string): string | null {
 export function planRelay(front: Front | undefined, text: string): RelayPlan {
   if (!front) return { ok: false, reason: 'No such front.' }
   const session = relayTarget(front)
-  if (!session) return { ok: false, reason: `${front.name} has no open session.` }
+  if (!session) return { ok: false, reason: `${JSON.stringify(front.name)} has no open session.` }
   const refused = refusal(session, text)
   if (refused) return { ok: false, reason: refused }
-  const relayed = `Relayed from the coordinator by the user: "${text}"`
-  return {
-    ok: true,
-    sessionId: session.report.sessionId,
-    message: asksApproval(session) ? `${relayed}. ${NOT_AN_ANSWER}` : relayed,
-  }
+  return { ok: true, sessionId: session.report.sessionId }
 }

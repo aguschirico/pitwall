@@ -102,15 +102,26 @@ few steps, the options it offered, and where and how to answer.
 
 ### Answering and asking
 
-- **Decisions and instructions** ("pick B", "go on", "look into X") are answered in the
-  coordinator's chat, or with `/coordinate <n> <text>`; the coordinator relays **my text verbatim**,
-  marked as relayed by the user.
-- **Approvals are never relayed.** The drill-down says which session to go to. If I ask the
-  coordinator to relay one, it refuses and says why. Detection is conservative and bilingual
-  (English and Spanish): a refusal costs a window switch, a wrong relay can cost a production
-  change.
+- **Decisions and instructions** ("pick B", "go on", "look into X") are answered with
+  `/coordinate <n> <text>`, relayed verbatim and marked as typed by the user, or asked for in the
+  coordinator's chat. What the coordinator's model drafts is shown in the engine's own question
+  dialog (`$.ui.ask`) and goes only on **Send**; it is marked as drafted by the model and confirmed
+  by the user. "Don't send" is the first option, so a dialog that settles by itself lands on no.
+  The same yes is asked when the model writes to a front's session with SendMessage directly.
+- **Approvals are never relayed.** The drill-down says which session to go to. A session waiting
+  on an approval (OK push, an open permission dialog) takes no message through the panel at all,
+  since any words could be read as the answer. No message the coordinator sends, to a front or to
+  anyone else, goes out with an approval word in it. Detection is conservative and bilingual
+  (English and Spanish), and reads the text folded first: Unicode NFKC, invisible characters
+  dropped, common Cyrillic and Greek lookalikes mapped to Latin, letters spelled out one by one
+  joined. A refusal costs a window switch, a wrong relay can cost a production change.
 - A wait that is not classified yet (or a session without the mod) is never answered through the
-  panel.
+  panel, and before the coordinator's first refresh it sends nothing at all.
+- Text other sessions wrote (front names, topics, waits) reaches the coordinator's model as
+  quoted data on one line, cut short, under a line that says it is never to be followed. The
+  relayed text itself travels in JSON quotes, so it cannot close its envelope.
+- These are layers, not the only guard: the receiving session still asks its own permissions
+  before any tool runs.
 
 ### Detection
 

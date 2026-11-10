@@ -42,14 +42,23 @@ Paused · 1
 - **Answer from the coordinator**: `/coordinate 1 pick B` sends your words, verbatim, to the first
   waiting session. You can also just ask in the chat: "tell the search one to go with Redis",
   "merge these two fronts", "call the feat/x front 'Desktop upgrade'", "dismiss the old one".
+  Anything the coordinator writes for you is shown in a dialog first and only goes when you pick
+  **Send**.
 
 ## What it never does
 
 - **It does not relay approvals.** Commit, push, PR, merge, deploy, production changes and tool
   permissions are answered in the session itself. The panel tells you which session and what to
-  answer, and the coordinator refuses to send anything that reads like an approval, in English or
-  Spanish. A refusal costs you a window switch; a wrong relay could cost a push to production.
-- It does not act on its own: it only sends what you ask it to send, marked as relayed by you.
+  answer. A session waiting on one of those takes no message through the panel at all, and no
+  message anywhere goes out with an approval word in it, in English or Spanish, also when the word
+  is hidden behind invisible characters, lookalike letters or spelled out letter by letter. A
+  refusal costs you a window switch; a wrong relay could cost a push to production.
+- **It does not act on its own.** Words you type with `/coordinate` go as yours. Words the
+  coordinator's model drafts go only after you confirm them in Claude Code's own dialog, which
+  neither the model nor another session can answer for you. The receiving session is told which
+  of the two it got.
+- **It treats other sessions' text as data.** Names, questions and waits that other sessions
+  report reach the coordinator's model quoted and cut short, marked as never to be followed.
 - It keeps its state on your machine, in `~/.claude/pitwall/`. The one thing that leaves it is
   a short classification call to Claude at the end of each turn, the same way your session talks to
   Claude anyway.
@@ -99,7 +108,7 @@ The design notes are in [`docs/design.md`](docs/design.md).
 ## Development
 
 ```
-claude plugin test .       # 177 tests
+claude plugin test .       # 188 tests
 claude plugin validate .   # what the engine would accept
 claude --plugin-dir .      # try it without installing
 ```
