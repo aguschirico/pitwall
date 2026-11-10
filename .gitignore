@@ -1,0 +1,6 @@
+.superpowers/
+node_modules/
+.claude-plugin/types/
+# Working notes from the first build, kept local
+docs/superpowers/
+.DS_Store

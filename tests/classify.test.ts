@@ -1,0 +1,161 @@
+import { expect, mock, test, type MockClock, type TestBody } from 'claude-code/testing'
+
+import type { OpEventResult } from 'claude-code'
+
+import { buildClassifyPrompt, fallbackClassification, parseClassification } from '../src/classify'
+import { parseReport, type Report } from '../src/report'
+
+type TestOn = Parameters<TestBody>[1]
+
+const USAGE = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
+
+const DECISION = '{"kind":"decision","why":"x","question":"A or B?","options":["A","B"],"recap":"r"}'
+
+test('a well formed classification parses', async () => {
+  expect(parseClassification(DECISION)).toEqual({
+    kind: 'decision',
+    why: 'x',
+    question: 'A or B?',
+    options: ['A', 'B'],
+    recap: 'r',
+    topic: '',
+  })
+})
+
+test('a classification wrapped in a code fence parses', async () => {
+  expect(parseClassification('```json\n' + DECISION + '\n```')?.kind).toBe('decision')
+})
+
+test('text that is not json does not parse', async () => {
+  expect(parseClassification('no json')).toBe(null)
+})
+
+test('an unknown kind does not parse', async () => {
+  expect(parseClassification(DECISION.replace('decision', 'otro'))).toBe(null)
+})
+
+test('the fallback is a review titled by the first non empty line', async () => {
+  expect(fallbackClassification('\n\nShall I push?\nmore')).toEqual({
+    kind: 'review',
+    why: 'Shall I push?',
+    question: 'Shall I push?',
+    options: [],
+    recap: '',
+    topic: '',
+  })
+})
+
+test('the prompt carries the message and cuts it to 6000 characters', async () => {
+  const prompt = buildClassifyPrompt('y'.repeat(7000))
+  expect(prompt.includes('y'.repeat(6000))).toBe(true)
+  expect(prompt.includes('y'.repeat(6001))).toBe(false)
+})
+
+type ModelAnswer = OpEventResult<'model.complete'>
+
+function engine(on: TestOn, model: (clock: MockClock) => ModelAnswer | Promise<ModelAnswer>) {
+  const reports: Report[] = []
+  const clock = mock.clock(on)
+  on('env.get', () => ({ value: '/h' }))
+  on('session.id', () => ({ value: 's1' }))
+  on('session.repo', () => ({ value: null }))
+  on('process.run', () => ({
+    value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
+  }))
+  on('fs.write', (_, e) => {
+    const report = parseReport(e.text)
+    if (report) reports.push(report)
+    return { value: undefined }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('model.complete', () => model(clock))
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  return { last: () => reports[reports.length - 1], clock }
+}
+
+const TURN = { answer: 'Option A or B?', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as const
+
+test('a turn that ends with a question reports a decision wait', async ($, on) => {
+  const { last, clock } = engine(on, () => ({ value: { isAnswered: true, text: DECISION, usage: USAGE } }))
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.turn.complete(TURN)
+  await clock.settle()
+
+  expect(last()?.state).toBe('waiting')
+  expect(last()?.waiting?.kind).toBe('decision')
+  expect(last()?.waiting?.options).toEqual(['A', 'B'])
+})
+
+test('a turn that only reports back leaves the session idle', async ($, on) => {
+  const none = '{"kind":"none","why":"","question":"","options":[],"recap":"listo"}'
+  const { last, clock } = engine(on, () => ({ value: { isAnswered: true, text: none, usage: USAGE } }))
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.turn.complete(TURN)
+  await clock.settle()
+
+  expect(last()?.state).toBe('idle')
+})
+
+test('a failing classification still reports the session as waiting for review', async ($, on) => {
+  const { last, clock } = engine(on, () => {
+    throw new Error('api down')
+  })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.turn.complete(TURN)
+  await clock.settle()
+
+  expect(last()?.state).toBe('waiting')
+  expect(last()?.waiting?.kind).toBe('review')
+  expect(last()?.waiting?.why).toBe('Option A or B?')
+})
+
+test('the end of a turn does not wait for the classification', async ($, on) => {
+  const { last, clock } = engine(on, async (c: MockClock) => {
+    await c.sleep(5_000)
+    return { value: { isAnswered: true, text: DECISION, usage: USAGE } }
+  })
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.turn.complete(TURN)
+
+  expect(last()?.state).toBe('waiting')
+  expect(last()?.waiting?.kind).toBe('review')
+})
+
+test('a classification that lands after the next turn started is dropped', async ($, on) => {
+  const { last, clock } = engine(on, async (c: MockClock) => {
+    await c.sleep(5_000)
+    return { value: { isAnswered: true, text: DECISION, usage: USAGE } }
+  })
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.turn.complete(TURN)
+  await $.turn.start({ text: 'pick A', turnId: 't2' })
+  await clock.advance(5_000)
+
+  expect(last()?.state).toBe('running')
+})
+
+test('a classification that lands after the session ended is dropped', async ($, on) => {
+  const { last, clock } = engine(on, async (c: MockClock) => {
+    await c.sleep(5_000)
+    return { value: { isAnswered: true, text: DECISION, usage: USAGE } }
+  })
+  on('session.end', () => ({ sessionId: 's1' }))
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.turn.complete(TURN)
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(5_000)
+
+  expect(last()?.state).toBe('ended')
+})
+
+test('the classification carries a short topic of the work', async () => {
+  const withTopic = DECISION.replace('"recap":"r"', '"recap":"r","topic":"Search cache"')
+  expect(parseClassification(withTopic)?.topic).toBe('Search cache')
+  expect(parseClassification(DECISION)?.topic).toBe('')
+})
+
+test('the prompt hands the current topic to keep it stable', async () => {
+  expect(buildClassifyPrompt('hola', 'Panel de sesiones').includes('Panel de sesiones')).toBe(true)
+})

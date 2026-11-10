@@ -1,0 +1,6 @@
+{
+  "name": "pitwall",
+  "description": "pitwall: one view of every Claude Code session on your machine",
+  "owner": { "name": "Augusto Chirico", "url": "https://github.com/aguschirico" },
+  "plugins": [{ "name": "pitwall", "source": "./" }]
+}
