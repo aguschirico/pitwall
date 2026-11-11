@@ -103,7 +103,8 @@ few steps, the options it offered, and where and how to answer.
 ### Answering and asking
 
 - **Decisions and instructions** ("pick B", "go on", "look into X") are answered with
-  `/coordinate <n> <text>`, relayed verbatim and marked as typed by the user, or asked for in the
+  `/coordinate <n> <text>` (`n` is any row's number on the panel, waiting, running or paused),
+  relayed verbatim and marked as typed by the user, or asked for in the
   coordinator's chat. What the coordinator's model drafts is shown in the engine's own question
   dialog (`$.ui.ask`) and goes only on **Send**; it is marked as drafted by the model and confirmed
   by the user. "Don't send" is the first option, so a dialog that settles by itself lands on no.

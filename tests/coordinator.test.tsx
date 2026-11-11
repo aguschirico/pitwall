@@ -175,11 +175,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await clock.settle()
     const ui = await $.ui.mount({ ...PANE, surface })
 
-    expect(await ui.find({ type: 'Text', text: /Go with A/ })).toBe(undefined)
+    expect(await ui.find({ type: 'Markdown', text: /Go with A/ })).toBe(undefined)
     await ui.press({ key: '/repo#search' })
-    expect(await ui.find({ type: 'Text', text: /Go with A/ })).toBeDefined()
+    expect(await ui.find({ type: 'Markdown', text: /Go with A/ })).toBeDefined()
     await ui.press({ key: '/repo#search' })
-    expect(await ui.find({ type: 'Text', text: /Go with A/ })).toBe(undefined)
+    expect(await ui.find({ type: 'Markdown', text: /Go with A/ })).toBe(undefined)
     await ui.unmount()
   })
 }
@@ -603,7 +603,9 @@ test('opening a waiting front shows what the session last said and its last step
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: '/repo#search' })
 
-  expect(await ui.find({ type: 'Text', text: /I tried both options on real data/ })).toBeDefined()
+  // Drawn as markdown, as the chat draws a reply, not as raw lines.
+  const said = await ui.find({ type: 'Markdown', text: /I tried both options on real data/ })
+  expect(said?.text).toBe('I tried both options on real data.\nGo with A or B?')
   expect(await ui.find({ type: 'Text', text: /Edit: src\/cache\.ts/ })).toBeDefined()
   await ui.unmount()
 })
@@ -675,7 +677,25 @@ test('/coordinate with a number nobody has says so', async ($, on) => {
   await clock.settle()
   const done = await $.command.run(coordinate('9 hola'))
 
-  expect(done.text).toBe('No session is waiting with number 9. There are 1.')
+  expect(done.text).toBe('No row has number 9. There are 3.')
+})
+
+test('every row has a number: a running front takes words too, a paused one has no session', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^2 ● $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^3 ○ $/ })).toBeDefined()
+  await ui.unmount()
+
+  const running = await $.command.run(coordinate('2 rerun the tests'))
+  expect(running.text).toBe('Sent to "docs".')
+  expect(seen.sent).toEqual([{ to: 'docs', text: 'Relayed from the coordinator session, typed by the user: "rerun the tests"' }])
+
+  const paused = await $.command.run(coordinate('3 go on'))
+  expect(paused.text).toBe('"old" has no open session.')
 })
 
 test('/coordinate without text explains how to use it', async ($, on) => {
@@ -685,7 +705,7 @@ test('/coordinate without text explains how to use it', async ($, on) => {
   const done = await $.command.run(coordinate('1'))
 
   expect(done.text).toBe(
-    'Usage: /coordinate <number> <text>, or /coordinate <number> go to jump to that session, with the row number in "Waiting on you".',
+    'Usage: /coordinate <number> <text>, or /coordinate <number> go to jump to that session, with the row number on the panel.',
   )
 })
 

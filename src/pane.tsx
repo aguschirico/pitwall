@@ -4,7 +4,8 @@
 import { atom, read, update } from 'claude-code'
 import type { Hook, On } from 'claude-code'
 
-import type { PanelGroup, PanelRow, PanelView } from '../types'
+import type { PanelRow, PanelView } from '../types'
+import { drawnRows, repoParts } from './format'
 import { goToFront } from './focus'
 import { gitSection } from './pane-git'
 import { frontRow, type Elements, type RowActions } from './pane-rows'
@@ -54,9 +55,9 @@ function allRows(panel: PanelView): PanelRow[] {
 
 type Draw = (row: PanelRow, lead: string, leadColor: string | undefined, dim: boolean) => ReturnType<typeof frontRow>
 
-// The three sections for some of the rows; a waiting row keeps its number on
-// the whole panel. `showEmpty` draws a section with nothing in it, as the
-// panel of one repository does; inside a repository only sections with rows show.
+// The three sections for some of the rows, each row with its number on the
+// whole panel. `showEmpty` draws a section with nothing in it, as the panel of
+// one repository does; inside a repository only sections with rows show.
 function sections(els: Elements, part: PanelView, numberOf: (row: PanelRow) => number, draw: Draw, showEmpty: boolean) {
   const { Text } = els
   const header = (rows: PanelRow[], text: string) => showEmpty || rows.length > 0 ? [text] : []
@@ -68,24 +69,14 @@ function sections(els: Elements, part: PanelView, numberOf: (row: PanelRow) => n
     ...header(part.running, `Running · ${part.running.length}`).map(text => (
       <Text bold color="success">{text}</Text>
     )),
-    ...part.running.map(row => draw(row, '●', 'success', false)),
+    ...part.running.map(row => draw(row, `${numberOf(row)} ●`, 'success', false)),
     ...header(part.paused, `Paused · ${part.paused.length}`).map(text => (
       <Text bold dimColor>{text}</Text>
     )),
-    ...part.paused.map(row => draw(row, '○', undefined, true)),
+    ...part.paused.map(row => draw(row, `${numberOf(row)} ○`, undefined, true)),
   ]
 }
 
-// The panel split by repository, the repos in alphabetical order (the order
-// the coordinator already sorted each section in), or [] for a single one.
-function byRepo(panel: PanelView): { group: PanelGroup; part: PanelView }[] {
-  const groups = new Map<string, PanelGroup>()
-  for (const row of allRows(panel)) if (row.group) groups.set(row.group.label, row.group)
-  const of = (rows: PanelRow[], label: string) => rows.filter(row => row.group?.label === label)
-  return [...groups.values()]
-    .sort((a, b) => a.label.localeCompare(b.label))
-    .map(group => ({ group, part: { waiting: of(panel.waiting, group.label), running: of(panel.running, group.label), paused: of(panel.paused, group.label) } }))
-}
 
 async function drawPanel($: Engine, els: Elements, rows: number) {
   const { Box, Text } = els
@@ -102,8 +93,9 @@ async function drawPanel($: Engine, els: Elements, rows: number) {
   })
   const draw = (row: PanelRow, lead: string, leadColor: string | undefined, dim: boolean) =>
     frontRow(els, row, { lead, leadColor, dim, isOpen: open === row.id, isGitOpen: gitRow?.id === row.id }, actions(row.id))
-  const numberOf = (row: PanelRow) => panel.waiting.indexOf(row) + 1
-  const repos = byRepo(panel)
+  const numbers = new Map(drawnRows(panel).map((row, index) => [row.id, index + 1]))
+  const numberOf = (row: PanelRow) => numbers.get(row.id) ?? 0
+  const repos = repoParts(panel)
   const body =
     repos.length === 0
       ? sections(els, panel, numberOf, draw, true)

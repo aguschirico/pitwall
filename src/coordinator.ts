@@ -4,7 +4,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Hook, On, Timer } from 'claude-code'
 
-import { toView } from './format'
+import { drawnRows, toView } from './format'
 import { buildFronts, type Front } from './fronts'
 import { PANE_ID, PANE_TITLE, setView } from './pane'
 import { readOverrides } from './overrides'
@@ -22,16 +22,16 @@ let ticker: Timer | null = null
 let refreshing = false
 let coordinating = false
 let lastFronts: Front[] = []
-let lastWaitingIds: string[] = []
+let lastRowIds: string[] = []
 let refreshedOnce = false
 
 export function currentFronts(): Front[] {
   return lastFronts
 }
 
-// The ids of the "Waiting on you" rows in the order the panel numbers them.
-export function currentWaitingIds(): string[] {
-  return lastWaitingIds
+// The ids of every row in the order the panel numbers them.
+export function currentRowIds(): string[] {
+  return lastRowIds
 }
 
 // The shared snapshot when another panel wrote it lately, else a fresh one
@@ -57,7 +57,7 @@ async function refreshOnce($: Engine): Promise<void> {
     now,
   })
   const panel = toView(lastFronts, now, { pr: snapshot.pr, git: snapshot.git })
-  lastWaitingIds = panel.waiting.map(row => row.id)
+  lastRowIds = drawnRows(panel).map(row => row.id)
   await setView($, panel)
   refreshedOnce = true
 }

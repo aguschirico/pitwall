@@ -21,15 +21,15 @@ api
   2 · OK push  Desktop toasts  12m ago
       → 3 commits ready, wants your OK to push and open the PR
   Running · 1
-  ● Docs refresh  now
+  3 ● Docs refresh  now
       Edit: src/content/getting-started.md
   Paused · 1
-  ○ feat/onboarding  2d ago
+  4 ○ feat/onboarding  2d ago
       branch feat/onboarding · 2 commits ahead · 5 uncommitted
 
 blog
   Waiting on you · 1
-  3 · Review  Draft on terminal multiplexers  20m ago
+  5 · Review  Draft on terminal multiplexers  20m ago
       → first draft done, wants a read before the edit pass
 ```
 
@@ -48,8 +48,8 @@ blog
 - **Git at a glance**: commits over the main line, files changed, what is left uncommitted.
 - **Go to session**: brings that session's terminal tab to the front (Ghostty, iTerm2 and
   Terminal.app by tty; tmux, kitty and WezTerm through their remote control).
-- **Answer from the coordinator**: `/coordinate 1 pick B` sends your words, verbatim, to the first
-  waiting session. You can also just ask in the chat: "tell the search one to go with Redis",
+- **Answer from the coordinator**: every row has a number, and `/coordinate 1 pick B` sends your
+  words, verbatim, to the session in row 1, waiting or running. You can also just ask in the chat: "tell the search one to go with Redis",
   "merge these two fronts", "call the feat/x front 'Desktop upgrade'", "dismiss the old one".
   Anything the coordinator writes for you is shown in a dialog first and only goes when you pick
   **Send**.
@@ -96,6 +96,7 @@ show. Built and tested on Claude Code 2.1.322 on macOS.
 1. In the session you want as the coordinator, run `/panel`.
 2. Click a row under **Waiting on you** to see why it waits.
 3. Answer with `/coordinate <number> <text>`, or `/coordinate <number> go` to jump to that session.
+   Any row's number works, not only the waiting ones.
 4. Ask the coordinator about the fronts in plain words.
 
 ## How it works
@@ -122,7 +123,7 @@ The design notes are in [`docs/design.md`](docs/design.md).
 ## Development
 
 ```
-claude plugin test .       # 199 tests
+claude plugin test .       # 200 tests
 claude plugin validate .   # what the engine would accept
 claude --plugin-dir .      # try it without installing
 ```

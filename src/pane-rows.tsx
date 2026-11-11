@@ -11,14 +11,18 @@ export type Elements = ReturnType<Engine['ui']['resolve']>
 export type RowLook = { lead: string; leadColor: string | undefined; dim: boolean; isOpen: boolean; isGitOpen: boolean }
 export type RowActions = { onToggle: () => void; onToggleGit: () => void; onOpenIde: (path: string) => void; onGo: () => void }
 
+// The session's last message drawn as the chat draws a reply (bold, lists,
+// code), indented as a block, so a wrapped line keeps its indent.
 function contextRows(els: Elements, row: PanelRow) {
-  const { Box, Text } = els
+  const { Box, Text, Markdown } = els
   return (
     <Box flexDirection="column">
       {row.message && <Text dimColor>{'    What the session said:'}</Text>}
-      {row.message?.split('\n').map(line => (
-        <Text>{`    │ ${line}`}</Text>
-      ))}
+      {row.message && (
+        <Box paddingLeft={6}>
+          <Markdown text={row.message} />
+        </Box>
+      )}
       {row.steps.length > 0 && <Text dimColor>{'    What it did before:'}</Text>}
       {row.steps.map(step => (
         <Text dimColor>{`      ${step}`}</Text>

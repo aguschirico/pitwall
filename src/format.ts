@@ -168,10 +168,30 @@ export function repoGroups(fronts: Front[]): Map<string, PanelGroup> {
 }
 
 // A section's rows with each repository's together, the repos in alphabetical
-// order as the pane draws them, each keeping its own order: the waiting rows'
-// numbers then run down the panel.
+// order as the pane draws them, each keeping its own order.
 function byRepo(rows: PanelRow[]): PanelRow[] {
   return [...rows].sort((a, b) => (a.group?.label ?? '').localeCompare(b.group?.label ?? ''))
+}
+
+export type RepoPart = { group: PanelGroup; part: PanelView }
+
+// The panel split by repository, the repos in alphabetical order (the order
+// toView already sorted each section in), or [] for a single one.
+export function repoParts(panel: PanelView): RepoPart[] {
+  const groups = new Map<string, PanelGroup>()
+  for (const row of [...panel.waiting, ...panel.running, ...panel.paused]) if (row.group) groups.set(row.group.label, row.group)
+  const of = (rows: PanelRow[], label: string) => rows.filter(row => row.group?.label === label)
+  return [...groups.values()]
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .map(group => ({ group, part: { waiting: of(panel.waiting, group.label), running: of(panel.running, group.label), paused: of(panel.paused, group.label) } }))
+}
+
+// Every row in the order the pane draws it, which is the order it is numbered
+// in: /coordinate <n> reaches the row drawn with n, whatever its section.
+export function drawnRows(panel: PanelView): PanelRow[] {
+  const all = (part: PanelView) => [...part.waiting, ...part.running, ...part.paused]
+  const parts = repoParts(panel)
+  return parts.length === 0 ? all(panel) : parts.flatMap(one => all(one.part))
 }
 
 // Extras are keyed by front id; a front without one gets none.
