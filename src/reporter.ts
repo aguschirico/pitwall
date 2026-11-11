@@ -23,6 +23,8 @@ let current: Report | null = null
 let claudeHome: string | null = null
 let lastWrite = 0
 let turnSeq = 0
+// Whether this session runs settings hooks for plugins (see classic.PreToolUse).
+let classicHooksRun = false
 // The folder the session started in: its transcript lives under it, whatever the cwd is now.
 let startCwd: string | null = null
 
@@ -238,12 +240,22 @@ export function registerReporter(on: On): void {
     return ran
   })
 
-  // A check a person will answer: the dialog is about to show. In auto mode
-  // the classifier may still allow it, and the wait clears when the call runs.
+  // Settings hooks run in this session: PreToolUse fires before every call's
+  // check, so by the check below this says whether PermissionRequest will.
+  on('classic.PreToolUse', async ($, e, next) => {
+    classicHooksRun = true
+    return next(e)
+  })
+
+  // The fallback where settings hooks do not run (an organization's managed
+  // settings can turn them off for plugins): an ask a person may answer marks
+  // the wait. It cannot tell a dialog from auto mode's classifier, which
+  // allows the call and leaves the wait up while the command runs, so where
+  // PermissionRequest runs, only that marks one.
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
     const asksPerson = verdict.decision === 'ask' && e.approver === 'person' && e.tool_use_id !== undefined
-    if (asksPerson && e.agentId === undefined) {
+    if (asksPerson && e.agentId === undefined && !classicHooksRun) {
       await saveReport($, { state: 'waiting', waiting: permissionWait(e.tool, e.input) })
     }
     return verdict

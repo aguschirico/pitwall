@@ -97,6 +97,26 @@ test('a tool check a person will answer marks a manual wait', async ($, on) => {
   expect(seen.last()?.waiting?.why).toBe('Permission: Bash git push')
 })
 
+test('where settings hooks run, a tool check marks no wait: auto mode may allow it', async ($, on) => {
+  const seen = engine(on)
+  await $.session.start(START)
+  await $.tool.call({ tool: 'Bash', command: 'git commit -F msg.txt' })
+  await $.tool.check({ tool: 'Bash', input: { command: 'git commit -F msg.txt' }, tool_use_id: 'tu2', approver: 'person' })
+
+  expect(seen.last()?.state).toBe('running')
+  expect(seen.last()?.waiting).toBe(null)
+})
+
+test('where settings hooks run, a real permission dialog still marks the wait', async ($, on) => {
+  const seen = engine(on)
+  await $.session.start(START)
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await $.classic.PermissionRequest(ASK)
+
+  expect(seen.last()?.state).toBe('waiting')
+  expect(seen.last()?.waiting?.why.startsWith('Permission: Bash')).toBe(true)
+})
+
 test('the title skips pasted images and slash commands', async ($, on) => {
   const seen = engine(on)
   await $.session.start(START)

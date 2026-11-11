@@ -1,6 +1,6 @@
 {
   "name": "pitwall",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "A pit wall for your Claude Code sessions: every session on this machine, which ones wait on you, and why",
   "author": {
     "name": "Augusto Chirico",
