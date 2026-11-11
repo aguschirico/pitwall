@@ -9,6 +9,7 @@ import { TAG } from './format'
 import type { Front, FrontOverrides, FrontSession } from './fronts'
 import { goToFront } from './focus'
 import { approvalRefusal, planRelay, refusal, relayMessage, type Author } from './relay'
+import { checksWords } from './settings'
 import { oneLine, quoted } from './untrusted'
 
 type Engine = Parameters<Hook<'session.start'>>[0]
@@ -102,7 +103,7 @@ async function sendToFront($: Engine, frontKey: unknown, text: unknown, author: 
   if (typeof text !== 'string' || text.trim() === '') return 'Missing the text to send.'
   const front = findFront(frontKey)
   if (typeof front === 'string') return front
-  const plan = planRelay(front, text)
+  const plan = planRelay(front, text, checksWords(author))
   if (!plan.ok) return plan.reason
   const confirmed = author === 'confirmed' ? await confirmSend($, front.name, text) : { line: text }
   if ('refused' in confirmed) return confirmed.refused
@@ -162,7 +163,9 @@ export function registerToolHooks(on: On): void {
     if (e.origin.kind === 'plugin' && e.origin.name === PLUGIN) return next(e)
     if (!hasRefreshed()) return { isDelivered: false, reason: 'The panel is still reading the sessions: try again in a few seconds.' }
     const session = frontSessionFor(e.to)
-    const refused = session ? refusal(session, e.text) : approvalRefusal(e.text)
+    // The model wrote these words: they are read as drafted.
+    const words = checksWords('confirmed')
+    const refused = session ? refusal(session, e.text, words) : words ? approvalRefusal(e.text) : null
     if (refused) return { isDelivered: false, reason: refused }
     if (!session) return next(e)
     const confirmed = await confirmSend($, session.live?.name ?? session.report.sessionId, e.text)

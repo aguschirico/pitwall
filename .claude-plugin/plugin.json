@@ -1,12 +1,21 @@
 {
   "name": "pitwall",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A pit wall for your Claude Code sessions: every session on this machine, which ones wait on you, and why",
-  "author": { "name": "Augusto Chirico", "url": "https://github.com/aguschirico" },
+  "author": {
+    "name": "Augusto Chirico",
+    "url": "https://github.com/aguschirico"
+  },
   "homepage": "https://github.com/aguschirico/pitwall",
   "repository": "https://github.com/aguschirico/pitwall",
   "license": "MIT",
-  "keywords": ["sessions", "coordinator", "panel", "multitasking", "worktrees"],
+  "keywords": [
+    "sessions",
+    "coordinator",
+    "panel",
+    "multitasking",
+    "worktrees"
+  ],
   "types": "./types/index.d.ts",
   "userConfig": {
     "refreshSeconds": {
@@ -14,6 +23,17 @@
       "title": "Refresh interval (seconds)",
       "description": "How often the panel reads the other sessions: 2 to 120 seconds, 5 by default.",
       "default": 5
+    },
+    "approvalCheck": {
+      "type": "string",
+      "title": "Approval word check",
+      "description": "Which messages are refused when they mention push, PR, merge, deploy or prod. drafted: only what the coordinator's model writes (your /coordinate words go as typed). strict: every message. off: none. A session waiting on an approval never takes a message either way.",
+      "options": [
+        "drafted",
+        "strict",
+        "off"
+      ],
+      "default": "drafted"
     }
   }
 }

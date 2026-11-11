@@ -713,7 +713,18 @@ test('/coordinate 1 sends the text to the first waiting front', async ($, on) =>
   expect(done.text).toBe('Sent to "search".')
 })
 
-test('/coordinate still refuses an approval', async ($, on) => {
+test('by default your /coordinate words go as typed, approval words included', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run(coordinate('1 do not merge yet, rerun the tests'))
+
+  expect(done.text).toBe('Sent to "search".')
+  expect(seen.sent).toEqual([{ to: 'search', text: 'Relayed from the coordinator session, typed by the user: "do not merge yet, rerun the tests"' }])
+})
+
+test('with the strict check /coordinate refuses an approval word', { options: { approvalCheck: 'strict' } }, async ($, on) => {
   const seen = world()
   const clock = engine(on, seen)
   await openPanel($)
@@ -722,6 +733,46 @@ test('/coordinate still refuses an approval', async ($, on) => {
 
   expect(seen.sent).toEqual([])
   expect(done.text?.startsWith('Not sent')).toBe(true)
+})
+
+test('by default what the model drafts is still checked', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const sent = await $.session.send({ to: 'other-session', text: 'merge it', origin: { kind: 'model' } })
+
+  expect(sent.isDelivered).toBe(false)
+  expect(seen.sent).toEqual([])
+})
+
+test('with the check off the model may name merge, and still needs your yes for a front', { options: { approvalCheck: 'off' } }, async ($, on) => {
+  const seen = world()
+  seen.confirm = 'Send'
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const other = await $.session.send({ to: 'other-session', text: 'merge it', origin: { kind: 'model' } })
+  const front = await $.session.send({ to: 's-search', text: 'the merge conflict is in cache.ts', origin: { kind: 'model' } })
+
+  expect(other.isDelivered).toBe(true)
+  expect(front.isDelivered).toBe(true)
+  expect(seen.asked).toHaveLength(1)
+})
+
+test('with the check off a session waiting for an OK to push still takes nothing', { options: { approvalCheck: 'off' } }, async ($, on) => {
+  const seen = world()
+  seen.files[`${REPORTS}/search.json`] = serializeReport({
+    ...SEARCH,
+    waiting: { kind: 'ok-push', why: 'wants your OK to push', question: 'Push?', options: [], recap: '', since: NOW - 120_000, classified: true },
+  })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run(coordinate('1 go ahead'))
+
+  expect(seen.sent).toEqual([])
+  expect(done.text?.startsWith('Not sent: that session waits for your OK')).toBe(true)
 })
 
 test('/coordinate with a number nobody has says so', async ($, on) => {

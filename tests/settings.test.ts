@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { refreshMsFrom } from '../src/settings'
+import { approvalCheckFrom, refreshMsFrom } from '../src/settings'
 
 test('no refresh interval set means 5 seconds', async () => {
   expect(refreshMsFrom({})).toBe(5_000)
@@ -17,4 +17,12 @@ test('a refresh interval that is not a number falls back to 5 seconds', async ()
   expect(refreshMsFrom({ refreshSeconds: 'soon' })).toBe(5_000)
   expect(refreshMsFrom({ refreshSeconds: true })).toBe(5_000)
   expect(refreshMsFrom({ refreshSeconds: '' })).toBe(5_000)
+})
+
+test('the approval check is drafted by default, and takes only its three values', async () => {
+  expect(approvalCheckFrom({})).toBe('drafted')
+  expect(approvalCheckFrom({ approvalCheck: 'strict' })).toBe('strict')
+  expect(approvalCheckFrom({ approvalCheck: 'off' })).toBe('off')
+  expect(approvalCheckFrom({ approvalCheck: 'loose' })).toBe('drafted')
+  expect(approvalCheckFrom({ approvalCheck: 3 })).toBe('drafted')
 })

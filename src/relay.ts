@@ -92,8 +92,9 @@ const WAIT_REASONS = {
 }
 
 // Null when the words may go; otherwise why not. A session waiting on an approval takes nothing
-// through the panel: any words could be read as the answer.
-export function refusal(session: FrontSession, text: string): string | null {
+// through the panel: any words could be read as the answer. `checkWords` is false where the
+// user's settings leave this message's words unread (see settings.ts).
+export function refusal(session: FrontSession, text: string, checkWords = true): string | null {
   const wait = session.report.state === 'waiting' ? session.report.waiting : null
   const where = sessionWhere(session)
   // An unclassified wait might be an approval: refused, saying why it is unknown.
@@ -102,7 +103,7 @@ export function refusal(session: FrontSession, text: string): string | null {
       ? `Still reading what that session asks: try again in a few seconds or answer it in ${where}.`
       : `That session does not have the mod loaded, so what it asks is unknown: answer it in ${where}, or run /reload-plugins there.`
   }
-  const word = approvalRefusal(text, ` Say it in ${where}.`)
+  const word = checkWords ? approvalRefusal(text, ` Say it in ${where}.`) : null
   if (word) return word
   if (wait !== null && asksApproval(session)) {
     return `Not sent: ${isPermissionDialog(wait) ? WAIT_REASONS.dialog : WAIT_REASONS.push}. Go to ${where}.`
@@ -110,11 +111,11 @@ export function refusal(session: FrontSession, text: string): string | null {
   return null
 }
 
-export function planRelay(front: Front | undefined, text: string): RelayPlan {
+export function planRelay(front: Front | undefined, text: string, checkWords = true): RelayPlan {
   if (!front) return { ok: false, reason: 'No such front.' }
   const session = relayTarget(front)
   if (!session) return { ok: false, reason: `${JSON.stringify(front.name)} has no open session.` }
-  const refused = refusal(session, text)
+  const refused = refusal(session, text, checkWords)
   if (refused) return { ok: false, reason: refused }
   return { ok: true, sessionId: session.report.sessionId }
 }
