@@ -190,3 +190,13 @@ test('two repositories with the same folder name are told apart by the folder ab
   expect(labels).toEqual(['one/app', 'two/app'])
   expect(new Set([...groups.values()].map(group => group.color)).size).toBe(2)
 })
+
+test('repositories come in alphabetical order, whichever waits longest', async () => {
+  const waiting = (id: string, root: string, since: number): Front => {
+    const one = inRepo(id, root)
+    const shown = { ...wait('decision'), since }
+    return { ...one, section: 'waiting', waiting: shown, sessions: one.sessions.map(s => ({ ...s, report: { ...s.report, state: 'waiting', waiting: shown } })) }
+  }
+  const view = toView([waiting('/w/zeta#a', '/w/zeta', NOW - 3_600_000), waiting('/w/alpha#b', '/w/alpha', NOW - 60_000)], NOW)
+  expect(view.waiting.map(row => row.group?.label)).toEqual(['alpha', 'zeta'])
+})

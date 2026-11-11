@@ -13,24 +13,24 @@ session, and rebuilding "where was I" every time I switch windows gets tiring. T
 to the chat of one session and keeps the latest picture of all the others.
 
 ```
-Waiting on you · 3
-  api · 2
-1 · Decision  Search cache  4m ago
-    branch feat/search · PR #128 · CI ok · 4 commits ahead · 3 behind main
-    → pick between a Redis cache and an in-memory one
-2 · OK push  Desktop toasts  12m ago
-    → 3 commits ready, wants your OK to push and open the PR
-  blog · 1
-3 · Review  Draft on terminal multiplexers  20m ago
-    → first draft done, wants a read before the edit pass
-Running · 1
-  api · 1
-● Docs refresh  now
-    Edit: src/content/getting-started.md
-Paused · 1
-  api · 1
-○ feat/onboarding  2d ago
-    branch feat/onboarding · 2 commits ahead · 5 uncommitted
+api
+  Waiting on you · 2
+  1 · Decision  Search cache  4m ago
+      branch feat/search · PR #128 · CI ok · 4 commits ahead · 3 behind main
+      → pick between a Redis cache and an in-memory one
+  2 · OK push  Desktop toasts  12m ago
+      → 3 commits ready, wants your OK to push and open the PR
+  Running · 1
+  ● Docs refresh  now
+      Edit: src/content/getting-started.md
+  Paused · 1
+  ○ feat/onboarding  2d ago
+      branch feat/onboarding · 2 commits ahead · 5 uncommitted
+
+blog
+  Waiting on you · 1
+  3 · Review  Draft on terminal multiplexers  20m ago
+      → first draft done, wants a read before the edit pass
 ```
 
 ## What you get
@@ -40,9 +40,9 @@ Paused · 1
   what the session last said, its last steps, and where to answer.
 - **Running** and **Paused** below: what each front is doing now, plus PR and CI chips when the
   branch has a PR. Paused fronts stay for seven days, or until their branch is merged or deleted.
-- **Grouped by repository** when sessions run in more than one: each repo gets a header in its own
-  color inside every section, worktrees under their main repo. With a single repo there are no
-  headers.
+- **Grouped by repository** when sessions run in more than one: the repos in alphabetical order,
+  each in its own color with its own sections, worktrees under their main repo. With a single repo
+  the panel is just the three sections.
 - **Fronts, not sessions.** Sessions on the same repo and branch are one front, so picking a task up
   again in a new session keeps the same row. Sessions on `main` each get their own.
 - **Git at a glance**: commits over the main line, files changed, what is left uncommitted.
@@ -118,7 +118,7 @@ The design notes are in [`docs/design.md`](docs/design.md).
 ## Development
 
 ```
-claude plugin test .       # 198 tests
+claude plugin test .       # 199 tests
 claude plugin validate .   # what the engine would accept
 claude --plugin-dir .      # try it without installing
 ```

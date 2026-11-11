@@ -167,11 +167,11 @@ export function repoGroups(fronts: Front[]): Map<string, PanelGroup> {
   return new Map(labels.map((one, index) => [one.key, { label: one.label, color: GROUP_COLORS[index % GROUP_COLORS.length] ?? 'claude' }]))
 }
 
-// A section's rows with each repository's together, the repos in the order
-// they first appear (so the oldest wait still leads), each keeping its own order.
+// A section's rows with each repository's together, the repos in alphabetical
+// order as the pane draws them, each keeping its own order: the waiting rows'
+// numbers then run down the panel.
 function byRepo(rows: PanelRow[]): PanelRow[] {
-  const order = [...new Set(rows.map(row => row.group?.label ?? ''))]
-  return [...rows].sort((a, b) => order.indexOf(a.group?.label ?? '') - order.indexOf(b.group?.label ?? ''))
+  return [...rows].sort((a, b) => (a.group?.label ?? '').localeCompare(b.group?.label ?? ''))
 }
 
 // Extras are keyed by front id; a front without one gets none.
