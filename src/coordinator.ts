@@ -12,7 +12,8 @@ import { PANE_ID, PANE_TITLE, setView } from './pane'
 import { claudeHomeOf } from './paths'
 import { ioFrom, type Io } from './registry'
 import { computeSnapshot, readSnapshot, type Snapshot } from './snapshot'
-import { DEFAULT_REFRESH_S, stuckAfterMs } from './settings'
+import { nudgeStuck } from './nudge'
+import { DEFAULT_REFRESH_S, notifiesStuck, stuckAfterMs } from './settings'
 import { registerTools } from './tools'
 
 type Engine = Parameters<Hook<'session.start'>>[0]
@@ -75,7 +76,9 @@ async function refreshOnce($: Engine): Promise<void> {
   rowNumbers = assignNumbers(rowNumbers, drawnRows(view))
   const panel = withNumbers(view, rowNumbers)
   await setView($, panel)
+  const firstRefresh = !refreshedOnce
   refreshedOnce = true
+  if (notifiesStuck()) await nudgeStuck($, io, claudeHome, lastFronts, now, stuckAfterMs(), firstRefresh)
 }
 
 // False until the first refresh lands: before it no session is known, so the

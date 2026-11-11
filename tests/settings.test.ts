@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { approvalCheckFrom, refreshMsFrom, stuckMsFrom } from '../src/settings'
+import { approvalCheckFrom, notifyStuckFrom, refreshMsFrom, stuckMsFrom } from '../src/settings'
 
 test('no refresh interval set means 5 seconds', async () => {
   expect(refreshMsFrom({})).toBe(5_000)
@@ -38,4 +38,11 @@ test('a wait is stuck after 5 minutes unless the user set another threshold', as
 test('a stuck threshold of 0 turns the badge off', async () => {
   expect(stuckMsFrom({ stuckMinutes: 0 })).toBe(null)
   expect(stuckMsFrom({ stuckMinutes: -3 })).toBe(null)
+})
+
+test('the stuck notification is on unless the user turned it off', async () => {
+  expect(notifyStuckFrom({})).toBe(true)
+  expect(notifyStuckFrom({ stuckNotify: true })).toBe(true)
+  expect(notifyStuckFrom({ stuckNotify: false })).toBe(false)
+  expect(notifyStuckFrom({ stuckNotify: 'false' })).toBe(false)
 })

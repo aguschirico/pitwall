@@ -128,6 +128,12 @@ show. Built and tested on Claude Code 2.1.322 on macOS.
   `Waiting on you · 2 (1 stuck)`. 5 by default, `0` turns the badge off. Only waits count: a
   session that is running is never stuck. Set it the same way:
   `echo '{"stuckMinutes":"10"}' | claude plugin configure pitwall@aguschirico --values-stdin`.
+- **Notify when stuck**: when a wait turns stuck, pitwall also raises a native notification
+  through Claude Code's own channel (`preferredNotifChannel`: iTerm2, Ghostty, kitty, or the
+  desktop app), once per wait, naming the session and what it needs. Waits that were already
+  stuck when you opened the panel are not notified: you are looking at them. With two panels open,
+  only one notifies. On by default; turn it off with
+  `echo '{"stuckNotify":false}' | claude plugin configure pitwall@aguschirico --values-stdin`.
 
 ## How it works
 

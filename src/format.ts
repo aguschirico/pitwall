@@ -30,10 +30,14 @@ export type Line = { tag: string | null; title: string; age: string; stuck: bool
 
 // `stuckAfter`: how long a wait on the user goes before the row says it is
 // stuck, or null for never. Only a wait counts: a running row is not stuck.
+export function isStuck(front: Front, now: number, stuckAfter: number | null): boolean {
+  return front.waiting !== null && stuckAfter !== null && now - front.waiting.since >= stuckAfter
+}
+
 export function frontLine(front: Front, now: number, stuckAfter: number | null = DEFAULT_STUCK_MIN * MINUTE): Line {
   const since = front.waiting?.since ?? front.lastActivity
   const elapsed = now - since
-  const stuck = front.waiting !== null && stuckAfter !== null && elapsed >= stuckAfter
+  const stuck = isStuck(front, now, stuckAfter)
   return {
     tag: front.waiting ? TAG[front.waiting.kind] : null,
     title: front.name,

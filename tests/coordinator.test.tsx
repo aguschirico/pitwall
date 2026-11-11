@@ -58,6 +58,8 @@ type World = {
   gh: Record<string, string>
   lists: { count: number }
   sent: { to: string; text: string }[]
+  // Native notifications the panel raised.
+  notes: { title?: string; text: string }[]
   runs: string[][]
   // The user's answer to the send dialog; unset, the dialog is dismissed.
   confirm?: string
@@ -111,6 +113,10 @@ function engine(on: TestOn, world: World): MockClock {
   })
   on('command.register', () => ({ value: { command: 'panel' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.notify', (_, e) => {
+    world.notes.push({ title: e.title, text: e.text })
+    return { value: { isSent: true, channel: 'ghostty' } }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__pitwall__${e.name}` } }))
   on('session.send', (_, e) => {
@@ -140,6 +146,7 @@ function world(): World {
     gh: { docs: JSON.stringify({ number: 117, state: 'OPEN', reviewDecision: null, statusCheckRollup: [] }) },
     lists: { count: 0 },
     sent: [],
+    notes: [],
     asked: [],
     runs: [],
   }
@@ -907,4 +914,46 @@ test('the row button takes you to the session', async ($, on) => {
 
   expect(seen.runs.some(argv => argv[0] === 'osascript')).toBe(true)
   await ui.unmount()
+})
+
+// search has waited 2 minutes when the panel opens: it turns stuck 3 minutes later.
+test('a wait that turns stuck raises one notification, and only one', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  expect(seen.notes).toEqual([])
+  await clock.advance(180_000)
+  expect(seen.notes).toEqual([{ title: 'pitwall · Decision', text: 'search waits on you (5m): pick A or B' }])
+  await clock.advance(600_000)
+  expect(seen.notes.length).toBe(1)
+})
+
+test('waits already stuck when the panel opens are not notified', async ($, on) => {
+  const seen = world()
+  seen.files[`${REPORTS}/search.json`] = serializeReport({ ...SEARCH, waiting: SEARCH.waiting && { ...SEARCH.waiting, since: NOW - 900_000 } })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  await clock.advance(60_000)
+  expect(seen.notes).toEqual([])
+})
+
+test('a second panel does not notify a wait the first one told', async ($, on) => {
+  const seen = world()
+  seen.files[`${HOME}/.claude/pitwall/notified.json`] = JSON.stringify({ [`/repo#search@${NOW - 120_000}`]: NOW })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  await clock.advance(300_000)
+  expect(seen.notes).toEqual([])
+})
+
+test('with notifications off a stuck wait only shows on the panel', { options: { stuckNotify: false } }, async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  await clock.advance(300_000)
+  expect(seen.notes).toEqual([])
 })

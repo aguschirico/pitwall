@@ -38,6 +38,23 @@ export function stuckAfterMs(): number | null {
   return stuckAfter
 }
 
+// Whether a wait that turns stuck also raises a native notification. On
+// unless the user turned it off; with the badge off there is nothing to tell.
+export function notifyStuckFrom(options: PluginOptions): boolean {
+  const raw = options.stuckNotify
+  return raw !== false && raw !== 'false'
+}
+
+let notifyStuck = true
+
+export function setNotifyStuck(value: boolean): void {
+  notifyStuck = value
+}
+
+export function notifiesStuck(): boolean {
+  return notifyStuck
+}
+
 // Which messages the approval word rule reads. "drafted": only what the
 // coordinator's model wrote (what the user typed with /coordinate goes as
 // typed); "strict": every message; "off": none. Whatever the choice, a session
