@@ -3,6 +3,7 @@
 import type { Hook } from 'claude-code'
 
 import { isWaitKind, type WaitKind } from './report'
+import { cutAtWord } from './untrusted'
 
 type Engine = Parameters<Hook<'session.start'>>[0]
 
@@ -68,12 +69,12 @@ export function parseClassification(raw: string): Classification | null {
   if (kind !== 'none' && !isWaitKind(kind)) return null
   if (typeof why !== 'string' || typeof question !== 'string' || typeof recap !== 'string') return null
   if (!isStringList(options)) return null
-  return { kind, why, question, options, recap, topic }
+  return { kind, why: cutAtWord(why.trim(), LINE_MAX), question, options, recap, topic }
 }
 
 export function fallbackClassification(lastAssistant: string): Classification {
   const line = lastAssistant.split('\n').find(one => one.trim() !== '')?.trim() ?? ''
-  const why = line.slice(0, LINE_MAX)
+  const why = cutAtWord(line, LINE_MAX)
   return { kind: 'review', why, question: why, options: [], recap: '', topic: '' }
 }
 

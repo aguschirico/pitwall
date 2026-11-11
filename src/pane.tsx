@@ -19,7 +19,7 @@ const DEFAULT_ROWS = 40
 
 // Change a tag when its value's fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-5' })
+const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-6' })
 const selected = atom({ plugin: 'pitwall', key: 'selected' } as const, null, { shape: 'selected-1' })
 const gitOpen = atom({ plugin: 'pitwall', key: 'gitOpen' } as const, null, { shape: 'git-open-1' })
 
@@ -48,6 +48,22 @@ function bodyRows(e: unknown): number {
   return typeof rows === 'number' && rows > 0 ? rows : DEFAULT_ROWS
 }
 
+// A section's rows, with a header line where a new repository starts.
+function withHeaders(els: Elements, section: string, rows: PanelRow[], draw: (row: PanelRow, index: number) => ReturnType<typeof frontRow>) {
+  const { Text } = els
+  return rows.flatMap((row, index) => {
+    const group = row.group
+    if (!group || group.label === rows[index - 1]?.group?.label) return [draw(row, index)]
+    const count = rows.filter(one => one.group?.label === group.label).length
+    const header = (
+      <Text key={`${section}:${group.label}`} bold color={group.color}>
+        {`  ${group.label} · ${count}`}
+      </Text>
+    )
+    return [header, draw(row, index)]
+  })
+}
+
 function allRows(panel: PanelView): PanelRow[] {
   return [...panel.waiting, ...panel.running, ...panel.paused]
 }
@@ -70,11 +86,11 @@ async function drawPanel($: Engine, els: Elements, rows: number) {
   const list = (
     <Box flexDirection="column" height={gitRow ? Math.floor(rows / 2) : undefined} overflow={gitRow ? 'hidden' : undefined}>
       <Text bold color="warning" dimColor={panel.waiting.length === 0}>{`Waiting on you · ${panel.waiting.length}`}</Text>
-      {panel.waiting.map((row, index) => draw(row, `${index + 1} · ${row.tag ?? ''}`, 'warning', false))}
+      {withHeaders(els, 'waiting', panel.waiting, (row, index) => draw(row, `${index + 1} · ${row.tag ?? ''}`, 'warning', false))}
       <Text bold color="success">{`Running · ${panel.running.length}`}</Text>
-      {panel.running.map(row => draw(row, '●', 'success', false))}
+      {withHeaders(els, 'running', panel.running, row => draw(row, '●', 'success', false))}
       <Text bold dimColor>{`Paused · ${panel.paused.length}`}</Text>
-      {panel.paused.map(row => draw(row, '○', undefined, true))}
+      {withHeaders(els, 'paused', panel.paused, row => draw(row, '○', undefined, true))}
     </Box>
   )
   return (

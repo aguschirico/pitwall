@@ -1,6 +1,6 @@
 // The words the panel draws for a front. Pure, so the copy is tested apart
 // from any surface.
-import type { PanelDrill, PanelGit, PanelRow, PanelView } from '../types'
+import type { PanelDrill, PanelGit, PanelGroup, PanelRow, PanelView } from '../types'
 import type { Front, FrontSession } from './fronts'
 import type { GitInfo } from './git'
 import type { PrChip } from './pr'
@@ -145,8 +145,38 @@ function prWait(front: Front, pr: PrChip | null): PanelRow['detail'] {
   return `→ PR #${pr.number} open, ${ci}: needs your review or merge`
 }
 
+// Which repository a front belongs to: its main working tree (worktrees
+// included), else the folder its session runs in.
+function repoKey(front: Front): string {
+  return front.repoRoot ?? folderOf(front) ?? front.id
+}
+
+// Header colors, none of them the sections' own (warning, success).
+const GROUP_COLORS = ['claude', 'permission', 'suggestion', 'planMode', 'autoAccept', 'ide', 'merged', 'remember']
+
+const lastPart = (path: string): string => path.split('/').filter(Boolean).pop() ?? path
+
+// Each repository's header: its folder name, or its last two folders where two
+// share a name. Colors follow the labels' order, so a repo keeps its color
+// while the same repos are open. One repository on the panel needs no headers.
+export function repoGroups(fronts: Front[]): Map<string, PanelGroup> {
+  const keys = [...new Set(fronts.map(repoKey))]
+  if (keys.length < 2) return new Map()
+  const label = (key: string) => (keys.filter(other => lastPart(other) === lastPart(key)).length > 1 ? shortPath(key) : lastPart(key))
+  const labels = keys.map(key => ({ key, label: label(key) })).sort((a, b) => a.label.localeCompare(b.label))
+  return new Map(labels.map((one, index) => [one.key, { label: one.label, color: GROUP_COLORS[index % GROUP_COLORS.length] ?? 'claude' }]))
+}
+
+// A section's rows with each repository's together, the repos in the order
+// they first appear (so the oldest wait still leads), each keeping its own order.
+function byRepo(rows: PanelRow[]): PanelRow[] {
+  const order = [...new Set(rows.map(row => row.group?.label ?? ''))]
+  return [...rows].sort((a, b) => order.indexOf(a.group?.label ?? '') - order.indexOf(b.group?.label ?? ''))
+}
+
 // Extras are keyed by front id; a front without one gets none.
 export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): PanelView {
+  const groups = repoGroups(fronts)
   const row = (front: Front): PanelRow => {
     const pr = extras.pr?.[front.id] ?? null
     const git = extras.git?.[front.id] ?? null
@@ -155,6 +185,7 @@ export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): P
     const line = frontLine(front, now)
     return {
       id: front.id,
+      group: groups.get(repoKey(front)) ?? null,
       ...line,
       tag: waitsOnPr ? 'PR' : line.tag,
       detail: waitsOnPr ?? line.detail,
@@ -171,8 +202,8 @@ export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): P
   const waitsOnPr = (one: { front: Front; row: PanelRow }) => one.front.section !== 'waiting' && one.row.tag === 'PR'
   const of = (section: Front['section']) => rows.filter(one => one.front.section === section && !waitsOnPr(one)).map(one => one.row)
   return {
-    waiting: [...of('waiting'), ...rows.filter(waitsOnPr).map(one => one.row)],
-    running: of('running'),
-    paused: of('paused'),
+    waiting: byRepo([...of('waiting'), ...rows.filter(waitsOnPr).map(one => one.row)]),
+    running: byRepo(of('running')),
+    paused: byRepo(of('paused')),
   }
 }

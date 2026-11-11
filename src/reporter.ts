@@ -8,6 +8,7 @@ import { isCoordinating } from './coordinator'
 import { mayRename, renameSession } from './naming'
 import { parseTail, transcriptPath } from './registry'
 import { cutMessage, parseReport, PERMISSION_PREFIX, reportPath, serializeReport, type Report, type TerminalInfo, type Waiting } from './report'
+import { cutAtWord } from './untrusted'
 
 type Engine = Parameters<Hook<'session.start'>>[0]
 
@@ -26,11 +27,13 @@ let startCwd: string | null = null
 
 export function summarizeInput(tool: string, input: unknown): string {
   const text = pickField(input) ?? tool
-  return text.replace(/\s+/g, ' ').trim().slice(0, SUMMARY_MAX)
+  return cutAtWord(text.replace(/\s+/g, ' ').trim(), SUMMARY_MAX)
 }
 
 function pickField(input: unknown): string | null {
   if (typeof input !== 'object' || input === null) return null
+  const question = firstQuestion(input)
+  if (question) return question
   for (const key of SUMMARY_FIELDS) {
     const value: unknown = Reflect.get(input, key)
     if (typeof value === 'string' && value.trim() !== '') return value
@@ -138,8 +141,17 @@ async function followLocation($: Engine): Promise<Partial<Report>> {
   }
 }
 
+// AskUserQuestion's first question: what its dialog asks.
+function firstQuestion(input: object): string | null {
+  const questions: unknown = Reflect.get(input, 'questions')
+  const first: unknown = Array.isArray(questions) ? questions[0] : undefined
+  const text: unknown = typeof first === 'object' && first !== null ? Reflect.get(first, 'question') : undefined
+  return typeof text === 'string' && text.trim() !== '' ? text : null
+}
+
 function permissionWait(tool: string, input: unknown): Waiting {
-  const why = `${PERMISSION_PREFIX}${tool} ${summarizeInput(tool, input)}`
+  const summary = summarizeInput(tool, input)
+  const why = summary === tool ? `${PERMISSION_PREFIX}${tool}` : `${PERMISSION_PREFIX}${tool} ${summary}`
   return { kind: 'manual', why, question: why, options: [], recap: '', since: Date.now(), classified: true }
 }
 

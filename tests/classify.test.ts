@@ -159,3 +159,9 @@ test('the classification carries a short topic of the work', async () => {
 test('the prompt hands the current topic to keep it stable', async () => {
   expect(buildClassifyPrompt('hola', 'Panel de sesiones').includes('Panel de sesiones')).toBe(true)
 })
+
+test('a long fallback is cut at the last whole word', async () => {
+  const why = fallbackClassification(`${'word '.repeat(30)}tail`).why
+  expect(why.length).toBeLessThanOrEqual(120)
+  expect(why.endsWith(' word…')).toBe(true)
+})

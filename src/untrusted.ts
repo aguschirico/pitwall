@@ -37,6 +37,14 @@ export function oneLine(text: string, max: number): string {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line
 }
 
+// Cut to `max` at the last whole word, with … when anything was cut.
+export function cutAtWord(text: string, max: number): string {
+  if (text.length <= max) return text
+  const cut = text.slice(0, max - 1)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).trimEnd()}…`
+}
+
 // The same line in JSON quotes: how text from elsewhere reaches the model.
 export function quoted(text: string, max = 120): string {
   return JSON.stringify(oneLine(text, max))

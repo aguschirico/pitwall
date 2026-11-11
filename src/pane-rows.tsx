@@ -82,9 +82,15 @@ export function frontRow(els: Elements, row: PanelRow, look: RowLook, actions: R
         <Text dimColor>{`  ${row.age}`}</Text>
       </Box>
       {row.summary !== '' && (
-        <Text color={row.git?.warn ? 'warning' : undefined} dimColor={!row.git?.warn}>{`    ${row.summary}`}</Text>
+        <Box paddingLeft={4}>
+          <Text color={row.git?.warn ? 'warning' : undefined} dimColor={!row.git?.warn}>{row.summary}</Text>
+        </Box>
       )}
-      {row.detail && <Text>{`    ${row.detail}`}</Text>}
+      {row.detail && (
+        <Box paddingLeft={4}>
+          <Text>{row.detail}</Text>
+        </Box>
+      )}
       {look.isOpen && contextRows(els, row)}
       {look.isOpen && answerRows(els, row)}
       {look.isOpen && buttonRow(els, row, look, actions)}

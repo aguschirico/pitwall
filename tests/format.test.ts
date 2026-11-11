@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { age, drillDown, frontLine, gitView, summaryLine, toView } from '../src/format'
+import { age, drillDown, frontLine, gitView, repoGroups, summaryLine, toView } from '../src/format'
 import type { GitInfo } from '../src/git'
 import type { Front, FrontSession } from '../src/fronts'
 import type { Report, Waiting } from '../src/report'
@@ -161,4 +161,32 @@ test('a row says how long ago in words', async () => {
 
 test('the summary names the branch first when the front is named by its topic', async () => {
   expect(summaryLine(null, { ...GIT, dirty: 0 }, true, 'feat/search')).toBe('branch feat/search · 4 commits ahead · 3 behind main')
+})
+
+const inRepo = (id: string, repoRoot: string, cwd = repoRoot): Front => {
+  const base = front(null)
+  const [one] = base.sessions
+  const sessions = one ? [{ ...one, report: { ...one.report, cwd, repoRoot } }] : []
+  return { ...base, id, repoRoot, sessions }
+}
+
+test('one repository needs no group', async () => {
+  const view = toView([inRepo('/a#x', '/a'), inRepo('/a#y', '/a', '/a/.worktrees/y')], NOW)
+  expect(view.running.map(row => row.group)).toEqual([null, null])
+})
+
+test('a worktree is grouped under its main repository', async () => {
+  const view = toView([inRepo('/w/app#x', '/w/app', '/w/app/.worktrees/x'), inRepo('/w/blog#y', '/w/blog'), inRepo('/w/app#z', '/w/app')], NOW)
+  expect(view.running.map(row => [row.id, row.group?.label])).toEqual([
+    ['/w/app#x', 'app'],
+    ['/w/app#z', 'app'],
+    ['/w/blog#y', 'blog'],
+  ])
+})
+
+test('two repositories with the same folder name are told apart by the folder above', async () => {
+  const groups = repoGroups([inRepo('/w/one/app#x', '/w/one/app'), inRepo('/w/two/app#y', '/w/two/app')])
+  const labels = [...groups.values()].map(group => group.label)
+  expect(labels).toEqual(['one/app', 'two/app'])
+  expect(new Set([...groups.values()].map(group => group.color)).size).toBe(2)
 })

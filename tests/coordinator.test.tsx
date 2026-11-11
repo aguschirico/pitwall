@@ -184,6 +184,47 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
+// A second repository: one waiting front, older than search's wait.
+const BLOG = report('blog', {
+  cwd: '/blog',
+  repoRoot: '/blog',
+  branch: 'feat/post',
+  state: 'waiting',
+  waiting: { kind: 'review', why: 'read the draft', question: 'read the draft', options: [], recap: '', since: NOW - 600_000, classified: true },
+})
+
+test('fronts from two repositories are grouped under a header each, numbered as drawn', async ($, on) => {
+  const seen = world()
+  seen.files[`${REPORTS}/blog.json`] = serializeReport(BLOG)
+  seen.files[`${SESSIONS}/3.json`] = JSON.stringify({ pid: 3, sessionId: 'blog', cwd: '/blog', name: 's-blog', status: 'idle', updatedAt: NOW })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  const texts = (await ui.findAll({ type: 'Text' })).map(one => one.text)
+  const at = (text: string) => texts.findIndex(one => one.startsWith(text))
+  expect(texts).toContain('  blog · 1')
+  expect(texts).toContain('  repo · 1')
+  expect(at('  blog · 1')).toBeLessThan(at('1 · Review'))
+  expect(at('1 · Review')).toBeLessThan(at('  repo · 1'))
+  expect(at('  repo · 1')).toBeLessThan(at('2 · Decision'))
+  await ui.unmount()
+
+  const done = await $.command.run({ command: 'coordinate', args: '2 pick B', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(done.text).toBe('Sent to "search".')
+})
+
+test('fronts from one repository draw no headers', async ($, on) => {
+  const clock = engine(on, world())
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect(await ui.find({ type: 'Text', text: /^ {2}repo · / })).toBe(undefined)
+  await ui.unmount()
+})
+
 test('running /panel twice keeps one refresh per period', async ($, on) => {
   const seen = world()
   const clock = engine(on, seen)

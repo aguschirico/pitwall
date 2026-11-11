@@ -220,3 +220,19 @@ test('the end of a turn picks up the title Claude gave the conversation', async 
 
   expect(seen.last()?.aiTitle).toBe('Bugs de app web #3454')
 })
+
+test('a question dialog says what it asks', async ($, on) => {
+  const seen = engine(on)
+  await $.session.start(START)
+  await $.classic.PermissionRequest({ tool_name: 'AskUserQuestion', tool_input: { questions: [{ question: 'Which cache?' }] } })
+
+  expect(seen.last()?.waiting?.why).toBe('Permission: AskUserQuestion Which cache?')
+})
+
+test('a tool with nothing to show is named once', async ($, on) => {
+  const seen = engine(on)
+  await $.session.start(START)
+  await $.classic.PermissionRequest({ tool_name: 'TodoWrite', tool_input: {} })
+
+  expect(seen.last()?.waiting?.why).toBe('Permission: TodoWrite')
+})

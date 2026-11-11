@@ -26,8 +26,13 @@ export type PanelGit = {
   dirtyFiles: string[]
 }
 
+// The repository a row belongs to, when the panel shows more than one: its
+// folder name and the color its header is drawn in.
+export type PanelGroup = { label: string; color: string }
+
 export type PanelRow = {
   id: string
+  group: PanelGroup | null
   tag: string | null
   title: string
   age: string
