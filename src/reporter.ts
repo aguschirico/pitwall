@@ -4,7 +4,8 @@
 import type { Hook, On } from 'claude-code'
 
 import { classifyTurn, fallbackClassification, type Classification } from './classify'
-import { isUserNamed, renameSession } from './naming'
+import { isCoordinating } from './coordinator'
+import { mayRename, renameSession } from './naming'
 import { parseTail, transcriptPath } from './registry'
 import { cutMessage, parseReport, PERMISSION_PREFIX, reportPath, serializeReport, type Report, type TerminalInfo, type Waiting } from './report'
 
@@ -185,11 +186,13 @@ async function claudeTitle($: Engine): Promise<string | null> {
 }
 
 // A new topic names the session's front, and the session itself unless the
-// user named it.
+// user named it or another session has that name. The coordinator keeps its
+// name: it talks about the other fronts, so its topic is usually theirs.
 async function adoptTopic($: Engine, topic: string): Promise<void> {
   if (!current || !home || topic === '' || topic === current.topic) return
   await saveReport($, { topic })
-  if (await isUserNamed($, home, current.sessionId, current.autoName ?? null)) return
+  if (isCoordinating()) return
+  if (!(await mayRename($, home, current.sessionId, current.autoName ?? null, topic))) return
   if (await renameSession($, topic)) await saveReport($, { autoName: topic })
 }
 

@@ -93,7 +93,8 @@ Two roles in one mod:
   session moves: running, waiting on a permission dialog, finished a turn. When a turn ends, it marks
   the session as waiting right away and then asks a small model (Haiku) to classify the last message:
   what kind of wait it is, the question, the options, a short recap and a topic. The topic also
-  renames the session, unless you named it yourself.
+  renames the session, unless you named it yourself or another session already has that name
+  (sessions message each other by name). The coordinator keeps its own name.
 - **Coordinator**, in the session where you ran `/panel`. Every 15 seconds it reads the reports and
   Claude Code's own session registry, groups sessions into fronts, adds git and PR state, and draws
   the pane. When several sessions coordinate, whichever refreshes first writes a shared snapshot and
@@ -108,7 +109,7 @@ The design notes are in [`docs/design.md`](docs/design.md).
 ## Development
 
 ```
-claude plugin test .       # 188 tests
+claude plugin test .       # 190 tests
 claude plugin validate .   # what the engine would accept
 claude --plugin-dir .      # try it without installing
 ```
