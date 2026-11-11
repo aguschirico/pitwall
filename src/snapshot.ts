@@ -2,7 +2,9 @@
 // refreshes first after the shared snapshot goes stale reads the registry,
 // the reports, git and gh, and writes the snapshot; the others read it.
 // The snapshot holds every session, the writer's own included: each panel
-// leaves out its own session when it draws.
+// leaves out its own session when it draws. PR chips are asked of GitHub at
+// most once a minute per front, whatever the refresh interval: `prAt` says
+// when each was fetched, and a newer snapshot carries the chip over.
 import type { Hook } from 'claude-code'
 
 import { buildFronts, PAUSE_WINDOW_MS, type Front } from './fronts'
@@ -14,7 +16,7 @@ import { parseReport, reportPath, type Report } from './report'
 
 type Engine = Parameters<Hook<'session.start'>>[0]
 
-export const SNAPSHOT_TTL_MS = 15_000
+export const PR_TTL_MS = 60_000
 
 export type Snapshot = {
   v: 1
@@ -24,6 +26,8 @@ export type Snapshot = {
   inferred: Report[]
   live: LiveSession[]
   pr: Record<string, PrChip | null>
+  // When each front's PR chip was fetched; a snapshot written before this has none.
+  prAt: Record<string, number>
   git: Record<string, GitInfo | null>
 }
 
@@ -63,6 +67,7 @@ export function parseSnapshot(text: string): Snapshot | null {
     inferred: listOf(field(data, 'inferred'), parseReport),
     live: listOf(field(data, 'live'), parseLive),
     pr: recordOf<PrChip | null>(field(data, 'pr')),
+    prAt: Object.fromEntries(Object.entries(recordOf<unknown>(field(data, 'prAt'))).filter((entry): entry is [string, number] => typeof entry[1] === 'number')),
     git: recordOf<GitInfo | null>(field(data, 'git')),
   }
 }
@@ -99,9 +104,15 @@ async function gitFor(io: Io, front: Front): Promise<GitInfo | null> {
   return newest ? fetchGit(io, newest.report.cwd, ownBranch(front)) : null
 }
 
-async function prFor(io: Io, front: Front): Promise<PrChip | null> {
-  if (!ownBranch(front) || front.repoRoot === null || front.branch === null) return null
-  return fetchPr(io, front.repoRoot, front.branch)
+type PrLookup = { pr: PrChip | null; at: number | null }
+
+// The front's PR chip: the previous snapshot's when fetched less than a
+// minute ago, else asked of GitHub now.
+async function prFor(io: Io, front: Front, previous: Snapshot | null, now: number): Promise<PrLookup> {
+  if (!ownBranch(front) || front.repoRoot === null || front.branch === null) return { pr: null, at: null }
+  const at = previous?.prAt[front.id]
+  if (previous && at !== undefined && now - at < PR_TTL_MS) return { pr: previous.pr[front.id] ?? null, at }
+  return { pr: await fetchPr(io, front.repoRoot, front.branch), at: now }
 }
 
 async function sessionsNow(io: Io, home: string, now: number) {
@@ -112,13 +123,14 @@ async function sessionsNow(io: Io, home: string, now: number) {
   return { live, reports, inferred }
 }
 
-export async function computeSnapshot($: Engine, io: Io, home: string, now: number): Promise<Snapshot> {
+// `previous` is the last snapshot read, stale or not: it lends recent PR chips.
+export async function computeSnapshot($: Engine, io: Io, home: string, now: number, previous: Snapshot | null = null): Promise<Snapshot> {
   const { live, reports, inferred } = await sessionsNow(io, home, now)
   const fronts = buildFronts({ reports, inferred, live, overrides: await readOverrides($), now })
   const judged = await Promise.all(
     fronts.map(async front => {
-      const pr = await prFor(io, front)
-      return { front, pr, over: await isOver(io, front, pr), git: await gitFor(io, front) }
+      const { pr, at } = await prFor(io, front, previous, now)
+      return { front, pr, prAt: at, over: await isOver(io, front, pr), git: await gitFor(io, front) }
     }),
   )
   await dismissFronts($, judged.filter(one => one.over).map(one => one.front.id), now)
@@ -130,6 +142,7 @@ export async function computeSnapshot($: Engine, io: Io, home: string, now: numb
     inferred,
     live,
     pr: Object.fromEntries(judged.map(one => [one.front.id, one.pr])),
+    prAt: Object.fromEntries(judged.flatMap(one => (one.prAt === null ? [] : [[one.front.id, one.prAt]]))),
     git: Object.fromEntries(judged.map(one => [one.front.id, one.git])),
   }
   await $.fs.write(snapshotPath(home), JSON.stringify(snapshot))

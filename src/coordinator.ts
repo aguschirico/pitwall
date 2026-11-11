@@ -1,5 +1,6 @@
 // The coordinator: `/panel` makes this session the one that watches the
-// others. Every REFRESH_MS it reads the reports and the registry, groups them
+// others. Every refresh interval (5 seconds unless the user set another) it
+// reads the reports and the registry, groups them
 // into fronts and stores the worded panel the pane draws.
 import { atom, read, update } from 'claude-code'
 import type { Hook, On, Timer } from 'claude-code'
@@ -9,12 +10,24 @@ import { buildFronts, type Front } from './fronts'
 import { PANE_ID, PANE_TITLE, setView } from './pane'
 import { readOverrides } from './overrides'
 import { ioFrom, type Io } from './registry'
-import { computeSnapshot, readSnapshot, SNAPSHOT_TTL_MS, type Snapshot } from './snapshot'
+import { computeSnapshot, readSnapshot, type Snapshot } from './snapshot'
+import { DEFAULT_REFRESH_S } from './settings'
 import { registerTools } from './tools'
 
 type Engine = Parameters<Hook<'session.start'>>[0]
 
-export const REFRESH_MS = 15_000
+export const DEFAULT_REFRESH_MS = DEFAULT_REFRESH_S * 1000
+
+// The interval this session refreshes at, set from the user's options at register.
+let refreshMs = DEFAULT_REFRESH_MS
+
+export function setRefreshMs(ms: number): void {
+  refreshMs = ms
+}
+
+export function currentRefreshMs(): number {
+  return refreshMs
+}
 
 export const coordinator = atom({ plugin: 'pitwall', key: 'coordinator' } as const, false, { shape: 'coordinator-1' })
 
@@ -34,12 +47,13 @@ export function currentRowIds(): string[] {
   return lastRowIds
 }
 
-// The shared snapshot when another panel wrote it lately, else a fresh one
-// this panel computes and writes for the others.
+// The shared snapshot when another panel wrote it within this panel's own
+// interval, else a fresh one this panel computes and writes for the others.
+// The stale one still lends its PR chips that are recent enough.
 async function latestSnapshot($: Engine, io: Io, home: string, now: number): Promise<Snapshot> {
   const shared = await readSnapshot(io, home)
-  if (shared && now - shared.at < SNAPSHOT_TTL_MS) return shared
-  return computeSnapshot($, io, home, now)
+  if (shared && now - shared.at < refreshMs) return shared
+  return computeSnapshot($, io, home, now, shared)
 }
 
 async function refreshOnce($: Engine): Promise<void> {
@@ -85,7 +99,7 @@ export async function refresh($: Engine): Promise<void> {
 async function startWatching($: Engine): Promise<void> {
   coordinating = true
   await registerTools($)
-  if (ticker === null) ticker = $.clock.every(REFRESH_MS, () => void refresh($))
+  if (ticker === null) ticker = $.clock.every(refreshMs, () => void refresh($))
   $.clock.after(0, () => void refresh($))
 }
 

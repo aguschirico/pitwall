@@ -1,11 +1,19 @@
 {
   "name": "pitwall",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A pit wall for your Claude Code sessions: every session on this machine, which ones wait on you, and why",
   "author": { "name": "Augusto Chirico", "url": "https://github.com/aguschirico" },
   "homepage": "https://github.com/aguschirico/pitwall",
   "repository": "https://github.com/aguschirico/pitwall",
   "license": "MIT",
   "keywords": ["sessions", "coordinator", "panel", "multitasking", "worktrees"],
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "refreshSeconds": {
+      "type": "number",
+      "title": "Refresh interval (seconds)",
+      "description": "How often the panel reads the other sessions: 2 to 120 seconds, 5 by default.",
+      "default": 5
+    }
+  }
 }

@@ -1,6 +1,6 @@
 import { expect, mock, test, type MockClock, type TestBody } from 'claude-code/testing'
 
-import { REFRESH_MS } from '../src/coordinator'
+import { DEFAULT_REFRESH_MS as REFRESH_MS } from '../src/coordinator'
 import { PANE_ID } from '../src/pane'
 import { serializeReport, type Report } from '../src/report'
 
@@ -580,6 +580,59 @@ test('a stale snapshot is computed again and written for the other panels', asyn
 
   expect(seen.runs.some(argv => argv[0] === 'ps')).toBe(true)
   expect(JSON.parse(seen.files[SNAPSHOT] ?? '{}').at).toBe(NOW)
+})
+
+test('the panel refreshes every 5 seconds by default, and a snapshot older than that is computed again', async ($, on) => {
+  const seen = world()
+  seen.files[SNAPSHOT] = snapshotAt(NOW - 6_000)
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  expect(JSON.parse(seen.files[SNAPSHOT] ?? '{}').at).toBe(NOW)
+  const before = seen.lists.count
+  await clock.advance(4_000)
+  expect(seen.lists.count).toBe(before)
+  await clock.advance(1_000)
+  expect(seen.lists.count).toBe(before + 1)
+})
+
+test('a refresh interval set in the options is used', { options: { refreshSeconds: 30 } }, async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const before = seen.lists.count
+  await clock.advance(29_000)
+  expect(seen.lists.count).toBe(before)
+  await clock.advance(1_000)
+  expect(seen.lists.count).toBe(before + 1)
+})
+
+test('a refresh interval under 2 seconds is held to 2', { options: { refreshSeconds: 0.5 } }, async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const before = seen.lists.count
+  await clock.advance(1_000)
+  expect(seen.lists.count).toBe(before)
+  await clock.advance(1_000)
+  expect(seen.lists.count).toBe(before + 1)
+})
+
+test('GitHub is asked about a front PR at most once a minute, whatever the interval', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ghCalls = () => seen.runs.filter(argv => argv[0] === 'gh').length
+  const first = ghCalls()
+  expect(first).toBeGreaterThan(0)
+  await clock.advance(55_000)
+  expect(ghCalls()).toBe(first)
+  expect(JSON.parse(seen.files[SNAPSHOT] ?? '{}').pr['/repo#docs']?.number).toBe(117)
+  await clock.advance(5_000)
+  expect(ghCalls()).toBe(first * 2)
 })
 
 test('a panel leaves its own session out, though the snapshot keeps it for the others', async ($, on) => {

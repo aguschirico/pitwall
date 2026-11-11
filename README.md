@@ -99,6 +99,18 @@ show. Built and tested on Claude Code 2.1.322 on macOS.
    Any row's number works, not only the waiting ones.
 4. Ask the coordinator about the fronts in plain words.
 
+## Options
+
+- **Refresh interval (seconds)**: how often the panel reads the other sessions. 5 by default,
+  anything from 2 to 120 (a value outside that is held to the nearest end). Set it in Claude Code
+  with `/plugin configure pitwall@aguschirico`, or from a shell:
+
+  ```
+  echo '{"refreshSeconds":"10"}' | claude plugin configure pitwall@aguschirico --values-stdin
+  ```
+
+  Then restart the session, or run `/reload-plugins`.
+
 ## How it works
 
 Two roles in one mod:
@@ -109,10 +121,11 @@ Two roles in one mod:
   what kind of wait it is, the question, the options, a short recap and a topic. The topic also
   renames the session, unless you named it yourself or another session already has that name
   (sessions message each other by name). The coordinator keeps its own name.
-- **Coordinator**, in the session where you ran `/panel`. Every 15 seconds it reads the reports and
-  Claude Code's own session registry, groups sessions into fronts, adds git and PR state, and draws
-  the pane. When several sessions coordinate, whichever refreshes first writes a shared snapshot and
-  the others read it, so `git` and `gh` run once per tick, not once per panel.
+- **Coordinator**, in the session where you ran `/panel`. Every 5 seconds (see Options) it reads the
+  reports and Claude Code's own session registry, groups sessions into fronts, adds git and PR state,
+  and draws the pane. When several sessions coordinate, whichever refreshes first writes a shared
+  snapshot and the others read it, so `git` runs once per tick, not once per panel. PR and CI state
+  is asked of GitHub at most once a minute per front, whatever the interval.
 
 Sessions without the mod still appear, inferred from the registry and the tail of their transcript,
 and marked `no report`. Their waits are never answered through the panel, because what they wait
@@ -123,7 +136,7 @@ The design notes are in [`docs/design.md`](docs/design.md).
 ## Development
 
 ```
-claude plugin test .       # 200 tests
+claude plugin test .       # 207 tests
 claude plugin validate .   # what the engine would accept
 claude --plugin-dir .      # try it without installing
 ```

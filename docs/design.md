@@ -144,7 +144,10 @@ few steps, the options it offered, and where and how to answer.
 
 Every panel can coordinate, but only one does the work: whichever refreshes first after the shared
 snapshot (`~/.claude/pitwall/snapshot.json`) goes stale reads the registry, the reports, git
-and gh, and writes it; the others read it.
+and gh, and writes it; the others read it. A panel refreshes every 5 seconds unless the user set
+another interval (`refreshSeconds` in the plugin's options, held to 2..120), and a snapshot older
+than that panel's interval counts as stale. PR chips are the exception: each is asked of GitHub at
+most once a minute, the snapshot keeping when it was fetched (`prAt`) so the next writer reuses it.
 
 ### Portability
 
