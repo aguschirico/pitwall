@@ -1,16 +1,19 @@
-import { expect, test, type TestBody } from 'claude-code/testing'
+import { expect, mock, test, type TestBody } from 'claude-code/testing'
 
 import { parseReport, serializeReport, type Report } from '../src/report'
-import { summarizeInput } from '../src/reporter'
+import { PERMISSION_GRACE_MS, summarizeInput } from '../src/reporter'
 
 const DIR = '/h/.claude/pitwall/reports'
 
 type TestOn = Parameters<TestBody>[1]
-type Options = { failWrites?: boolean; ids?: string[]; branches?: string[]; existing?: Report }
+// `ask`: every call stays under way askMs (the classifier or the person
+// deciding), then runs runMs. The test raises the ask while it is under way.
+type Options = { clock?: boolean; ask?: { askMs: number; runMs?: number }; failWrites?: boolean; ids?: string[]; branches?: string[]; existing?: Report }
 
 // Stands for the engine beneath the reporter and keeps every report it writes.
 function engine(on: TestOn, options: Options = {}) {
   const reports: Report[] = []
+  const clock = options.clock ? mock.clock(on, { now: 1_000_000 }) : null
   const ids = [...(options.ids ?? ['s1'])]
   const branches = [...(options.branches ?? ['feat/x'])]
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/h' : undefined }))
@@ -40,13 +43,24 @@ function engine(on: TestOn, options: Options = {}) {
     return { value: undefined }
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('tool.call', () => ({ result: {} }))
-  on('tool.check', () => ({ decision: 'ask' }))
+  const callIds: string[] = []
+  const ask = options.ask
+  if (ask && clock) {
+    on('tool.call', async (_, e) => {
+      callIds.push(e.tool_use_id)
+      await clock.sleep(ask.askMs + (ask.runMs ?? 0))
+      return { result: {} }
+    })
+  } else {
+    on('tool.call', () => ({ result: {} }))
+  }
+  // A call that asks inside it gets past the check: its tool hook raises the ask.
+  on('tool.check', () => ({ decision: options.ask ? 'allow' : 'ask' }))
   on('classic.PermissionRequest', () => ({}))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
-  return { last: () => reports[reports.length - 1], reports }
+  return { last: () => reports[reports.length - 1], reports, clock, callIds }
 }
 
 const START = { cwd: '/repo', surface: 'terminal', isInteractive: true } as const
@@ -70,9 +84,10 @@ test('a non interactive session writes no report', async ($, on) => {
 })
 
 test('a permission dialog reports a manual wait', async ($, on) => {
-  const seen = engine(on)
+  const seen = engine(on, { clock: true })
   await $.session.start(START)
   await $.classic.PermissionRequest(ASK)
+  await seen.clock?.advance(PERMISSION_GRACE_MS)
 
   expect(seen.last()?.state).toBe('waiting')
   expect(seen.last()?.waiting?.kind).toBe('manual')
@@ -89,9 +104,10 @@ test('a tool check nobody will be asked about marks no wait', async ($, on) => {
 })
 
 test('a tool check a person will answer marks a manual wait', async ($, on) => {
-  const seen = engine(on)
+  const seen = engine(on, { clock: true })
   await $.session.start(START)
   await $.tool.check({ tool: 'Bash', input: { command: 'git push' }, tool_use_id: 'tu1', approver: 'person' })
+  await seen.clock?.advance(PERMISSION_GRACE_MS)
 
   expect(seen.last()?.state).toBe('waiting')
   expect(seen.last()?.waiting?.why).toBe('Permission: Bash git push')
@@ -108,10 +124,11 @@ test('where settings hooks run, a tool check marks no wait: auto mode may allow 
 })
 
 test('where settings hooks run, a real permission dialog still marks the wait', async ($, on) => {
-  const seen = engine(on)
+  const seen = engine(on, { clock: true })
   await $.session.start(START)
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   await $.classic.PermissionRequest(ASK)
+  await seen.clock?.advance(PERMISSION_GRACE_MS)
 
   expect(seen.last()?.state).toBe('waiting')
   expect(seen.last()?.waiting?.why.startsWith('Permission: Bash')).toBe(true)
@@ -250,9 +267,57 @@ test('a question dialog says what it asks', async ($, on) => {
 })
 
 test('a tool with nothing to show is named once', async ($, on) => {
-  const seen = engine(on)
+  const seen = engine(on, { clock: true })
   await $.session.start(START)
   await $.classic.PermissionRequest({ tool_name: 'TodoWrite', tool_input: {} })
+  await seen.clock?.advance(PERMISSION_GRACE_MS)
 
   expect(seen.last()?.waiting?.why).toBe('Permission: TodoWrite')
+})
+
+test('auto mode answering within the grace period shows no wait', async ($, on) => {
+  const seen = engine(on, { clock: true, ask: { askMs: 3_000 } })
+  const clock = seen.clock!
+  await $.session.start(START)
+  const call = $.tool.call({ tool: 'Bash', command: 'curl https://example.com' })
+  await clock.settle()
+  await $.classic.PermissionRequest(ASK)
+  await clock.advance(3_000)
+  await call
+  await clock.advance(PERMISSION_GRACE_MS * 2)
+
+  expect(seen.reports.some(one => one.state === 'waiting')).toBe(false)
+})
+
+test('a dialog still open after the grace period shows the wait, and clears when the call runs', async ($, on) => {
+  const seen = engine(on, { clock: true, ask: { askMs: 30_000 } })
+  const clock = seen.clock!
+  await $.session.start(START)
+  const call = $.tool.call({ tool: 'Bash', command: 'git push' })
+  await clock.settle()
+  await $.classic.PermissionRequest(ASK)
+  await clock.advance(PERMISSION_GRACE_MS - 1_000)
+  expect(seen.last()?.state).toBe('running')
+  await clock.advance(2_000)
+  expect(seen.last()?.state).toBe('waiting')
+  expect(seen.last()?.waiting?.why.startsWith('Permission: Bash')).toBe(true)
+  await clock.advance(30_000)
+  await call
+  expect(seen.last()?.state).toBe('running')
+})
+
+test('a command the engine draws as executing is not waiting, however long it runs', async ($, on) => {
+  const seen = engine(on, { clock: true, ask: { askMs: 1_000, runMs: 60_000 } })
+  const clock = seen.clock!
+  await $.session.start(START)
+  const call = $.tool.call({ tool: 'Bash', command: 'git commit -F msg.txt' })
+  await clock.settle()
+  await $.classic.PermissionRequest(ASK)
+  await clock.advance(2_000)
+  const id = seen.callIds[0] ?? ''
+  await $.ui.mount({ plugin: 'pitwall', surface: 'terminal', component: 'ToolProgress', requestId: id, props: { tool_use_id: id, kind: 'background_hint', hint: '(ctrl+b to run in background)' } })
+  await clock.advance(PERMISSION_GRACE_MS * 3)
+  expect(seen.reports.some(one => one.state === 'waiting')).toBe(false)
+  await clock.advance(60_000)
+  await call
 })

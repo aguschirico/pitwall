@@ -25,6 +25,22 @@ let lastWrite = 0
 let turnSeq = 0
 // Whether this session runs settings hooks for plugins (see classic.PreToolUse).
 let classicHooksRun = false
+// A permission wait not shown yet. Auto mode's classifier answers most asks
+// in seconds, so a wait shows only once it lasts PERMISSION_GRACE_MS: a real
+// dialog is still open by then, a classified call has run or is running.
+type PendingPermission = { seq: number; callId: string | null; wait: Waiting }
+let pending: PendingPermission | null = null
+let permissionSeq = 0
+// The main loop's calls under way, the newest last, and the ones the engine
+// already draws as executing (a Bash command's "run in background" pill).
+const callsUnderWay: string[] = []
+const callsExecuting = new Set<string>()
+// The last calls that finished: a wait for one of them is over.
+const callsFinished: string[] = []
+const FINISHED_KEPT = 50
+// Tools whose dialog is a question to the person: no classifier answers it.
+const PERSON_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode'])
+export const PERMISSION_GRACE_MS = 8_000
 // The folder the session started in: its transcript lives under it, whatever the cwd is now.
 let startCwd: string | null = null
 
@@ -158,6 +174,26 @@ function permissionWait(tool: string, input: unknown): Waiting {
   return { kind: 'manual', why, question: why, options: [], recap: '', since: Date.now(), classified: true }
 }
 
+// Shows the wait at once for a question to the person, else after the grace
+// period, if the same call has not run, nor started executing, by then.
+async function markPermission($: Engine, tool: string, input: unknown, callId: string | null): Promise<void> {
+  const wait = permissionWait(tool, input)
+  if (PERSON_TOOLS.has(tool)) {
+    pending = null
+    await saveReport($, { state: 'waiting', waiting: wait })
+    return
+  }
+  permissionSeq += 1
+  const seq = permissionSeq
+  pending = { seq, callId, wait }
+  $.clock.after(PERMISSION_GRACE_MS, () => {
+    if (pending?.seq !== seq) return
+    pending = null
+    if (callId !== null && (callsExecuting.has(callId) || callsFinished.includes(callId))) return
+    void saveReport($, { state: 'waiting', waiting: { ...wait, since: Date.now() } })
+  })
+}
+
 function toPatch(found: Classification, classified: boolean): Partial<Report> {
   if (found.kind === 'none') return { state: 'idle', waiting: null }
   const { kind, why, question, options, recap } = found
@@ -224,6 +260,7 @@ export function registerReporter(on: On): void {
     if (e.agentId === undefined) {
       turnSeq += 1
       await followSessionId($)
+      pending = null
       const title = current?.title ?? firstLine(e.text)
       await saveReport($, { state: 'running', waiting: null, title })
     }
@@ -235,9 +272,18 @@ export function registerReporter(on: On): void {
     const activity = `${e.tool}: ${summarizeInput(e.tool, e)}`
     if (current) current = { ...current, activity, steps: [...(current.steps ?? []), activity].slice(-STEPS_KEPT) }
     if (Date.now() - lastWrite >= ACTIVITY_WRITE_MS) await saveReport($, {})
-    const ran = await next(e)
-    if (current?.state === 'waiting') await saveReport($, { state: 'running', waiting: null })
-    return ran
+    const callId = e.tool_use_id
+    callsUnderWay.push(callId)
+    try {
+      return await next(e)
+    } finally {
+      callsUnderWay.splice(callsUnderWay.indexOf(callId), 1)
+      callsExecuting.delete(callId)
+      callsFinished.push(callId)
+      if (callsFinished.length > FINISHED_KEPT) callsFinished.shift()
+      if (pending?.callId === callId || pending?.callId === null) pending = null
+      if (current?.state === 'waiting') await saveReport($, { state: 'running', waiting: null })
+    }
   })
 
   // Settings hooks run in this session: PreToolUse fires before every call's
@@ -256,16 +302,33 @@ export function registerReporter(on: On): void {
     const verdict = await next(e)
     const asksPerson = verdict.decision === 'ask' && e.approver === 'person' && e.tool_use_id !== undefined
     if (asksPerson && e.agentId === undefined && !classicHooksRun) {
-      await saveReport($, { state: 'waiting', waiting: permissionWait(e.tool, e.input) })
+      await markPermission($, e.tool, e.input, e.tool_use_id ?? null)
     }
     return verdict
   })
 
-  // Fires only when a dialog is really raised, where no other plugin answers
-  // it first (a security plugin may: the tool.check above covers that).
+  // Fires when a dialog is raised, where no other plugin answers it first (a
+  // security plugin may: the tool.check above covers that). In auto mode it
+  // can fire while the classifier still decides, hence the grace period. It
+  // names no call: the main loop's newest one is the one asking.
   on('classic.PermissionRequest', async ($, e, next) => {
     if (e.agent_id === undefined) {
-      await saveReport($, { state: 'waiting', waiting: permissionWait(e.tool_name, e.tool_input) })
+      await markPermission($, e.tool_name, e.tool_input, callsUnderWay[callsUnderWay.length - 1] ?? null)
+    }
+    return next(e)
+  })
+
+  // The engine draws a command's "run in background" pill once it executes:
+  // its permission, if it had to ask one, is settled. Drawing changes nothing;
+  // a wait already shown for it clears off the drawing.
+  on('ui.render', { component: 'ToolProgress' }, ($, e, next) => {
+    const callId = e.props.tool_use_id
+    if (callsUnderWay.includes(callId) && !callsExecuting.has(callId)) {
+      callsExecuting.add(callId)
+      if (pending?.callId === callId) pending = null
+      if (current?.state === 'waiting' && current.waiting?.why.startsWith(PERMISSION_PREFIX)) {
+        $.clock.after(0, () => void saveReport($, { state: 'running', waiting: null }))
+      }
     }
     return next(e)
   })

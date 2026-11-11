@@ -138,6 +138,10 @@ few steps, the options it offered, and where and how to answer.
   classifies the last message with a small model (kind, why, question, options, recap, topic). A
   classification that lands after the next turn started is dropped.
 - A pending tool permission is **Manual** by definition.
+  It shows once the ask has lasted 8 seconds: auto mode's classifier answers most asks in less, and
+  a dialog the person has to answer is still open by then. A command the engine already draws as
+  executing (its "run in background" pill) has its permission settled and is never shown waiting.
+  A question to the person (AskUserQuestion, ExitPlanMode) shows at once.
 - **Fallback** for sessions without a report: the registry's `idle` status plus the last assistant
   message in the transcript.
 - The model runs only when a turn ends. The "running" line comes from cheap data: title, last tool,
