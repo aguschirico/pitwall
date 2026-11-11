@@ -83,7 +83,7 @@ export function frontRow(els: Elements, row: PanelRow, look: RowLook, actions: R
         <Button key={row.id} plain dimColor={look.dim} onPress={actions.onToggle}>
           {row.title}
         </Button>
-        <Text dimColor>{`  ${row.age}`}</Text>
+        <Text color={row.stuck ? 'warning' : undefined} bold={row.stuck} dimColor={!row.stuck}>{`  ${row.age}`}</Text>
       </Box>
       {row.summary !== '' && (
         <Box paddingLeft={4}>

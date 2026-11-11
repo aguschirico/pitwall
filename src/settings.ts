@@ -15,6 +15,29 @@ export function refreshMsFrom(options: PluginOptions): number {
   return Math.round(Math.min(MAX_REFRESH_S, Math.max(MIN_REFRESH_S, seconds)) * 1000)
 }
 
+export const DEFAULT_STUCK_MIN = 5
+export const MAX_STUCK_MIN = 1440
+
+// After how long a wait on the user counts as stuck, in ms, or null when the
+// badge is off (0). Missing or not a number means 5 minutes; at most a day.
+export function stuckMsFrom(options: PluginOptions): number | null {
+  const raw = options.stuckMinutes
+  const minutes = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : Number.NaN
+  if (!Number.isFinite(minutes)) return DEFAULT_STUCK_MIN * 60_000
+  if (minutes <= 0) return null
+  return Math.round(Math.min(MAX_STUCK_MIN, minutes) * 60_000)
+}
+
+let stuckAfter: number | null = DEFAULT_STUCK_MIN * 60_000
+
+export function setStuckAfterMs(ms: number | null): void {
+  stuckAfter = ms
+}
+
+export function stuckAfterMs(): number | null {
+  return stuckAfter
+}
+
 // Which messages the approval word rule reads. "drafted": only what the
 // coordinator's model wrote (what the user typed with /coordinate goes as
 // typed); "strict": every message; "off": none. Whatever the choice, a session

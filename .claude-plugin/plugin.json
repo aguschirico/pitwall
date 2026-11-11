@@ -1,6 +1,6 @@
 {
   "name": "pitwall",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "A pit wall for your Claude Code sessions: every session on this machine, which ones wait on you, and why",
   "author": {
     "name": "Augusto Chirico",
@@ -34,6 +34,12 @@
         "off"
       ],
       "default": "drafted"
+    },
+    "stuckMinutes": {
+      "type": "number",
+      "title": "Stuck after (minutes)",
+      "description": "A session waiting on you for longer than this gets a stuck badge, and its section counts it. 5 by default, 0 turns the badge off.",
+      "default": 5
     }
   }
 }

@@ -12,7 +12,7 @@ import { PANE_ID, PANE_TITLE, setView } from './pane'
 import { claudeHomeOf } from './paths'
 import { ioFrom, type Io } from './registry'
 import { computeSnapshot, readSnapshot, type Snapshot } from './snapshot'
-import { DEFAULT_REFRESH_S } from './settings'
+import { DEFAULT_REFRESH_S, stuckAfterMs } from './settings'
 import { registerTools } from './tools'
 
 type Engine = Parameters<Hook<'session.start'>>[0]
@@ -71,7 +71,7 @@ async function refreshOnce($: Engine): Promise<void> {
     overrides: await readOverrides($),
     now,
   })
-  const view = toView(lastFronts, now, { pr: snapshot.pr, git: snapshot.git })
+  const view = toView(lastFronts, now, { pr: snapshot.pr, git: snapshot.git, stuckAfter: stuckAfterMs() })
   rowNumbers = assignNumbers(rowNumbers, drawnRows(view))
   const panel = withNumbers(view, rowNumbers)
   await setView($, panel)

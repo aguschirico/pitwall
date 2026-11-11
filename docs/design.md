@@ -82,6 +82,8 @@ Three blocks, top to bottom:
 
 1. **Waiting on you**: always on top, highlighted. One line per front: kind of wait, front name,
    time waiting; below it, one line on *what* it needs. Oldest wait first.
+   A wait older than the user's threshold (`stuckMinutes`, 5 by default, 0 for off) turns its time
+   into an amber `⏳ stuck 12m` badge, and the block's header counts them: `Waiting on you · 2 (1 stuck)`.
 2. **Running**: one line per front with what it is doing now, plus PR and CI chips when they apply.
 3. **Paused**: fronts with no live session, so they are not forgotten.
 

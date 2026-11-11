@@ -5,7 +5,7 @@ import { atom, read, update } from 'claude-code'
 import type { Hook, On } from 'claude-code'
 
 import type { PanelRow, PanelView } from '../types'
-import { repoParts } from './format'
+import { repoParts, waitingHeader } from './format'
 import { goToFront } from './focus'
 import { gitSection } from './pane-git'
 import { frontRow, type Elements, type RowActions } from './pane-rows'
@@ -20,7 +20,7 @@ const DEFAULT_ROWS = 40
 
 // Change a tag when its value's fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-7' })
+const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-8' })
 const selected = atom({ plugin: 'pitwall', key: 'selected' } as const, null, { shape: 'selected-1' })
 const gitOpen = atom({ plugin: 'pitwall', key: 'gitOpen' } as const, null, { shape: 'git-open-1' })
 
@@ -62,7 +62,7 @@ function sections(els: Elements, part: PanelView, numberOf: (row: PanelRow) => n
   const { Text } = els
   const header = (rows: PanelRow[], text: string) => showEmpty || rows.length > 0 ? [text] : []
   return [
-    ...header(part.waiting, `Waiting on you · ${part.waiting.length}`).map(text => (
+    ...header(part.waiting, waitingHeader(part.waiting)).map(text => (
       <Text bold color="warning" dimColor={part.waiting.length === 0}>{text}</Text>
     )),
     ...part.waiting.map(row => draw(row, `${numberOf(row)} · ${row.tag ?? ''}`, 'warning', false)),

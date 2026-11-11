@@ -38,6 +38,8 @@ export type PanelRow = {
   tag: string | null
   title: string
   age: string
+  // Waiting on the user for longer than their threshold: the age is a badge.
+  stuck: boolean
   summary: string
   detail: string | null
   activity: string | null

@@ -5,6 +5,7 @@ import type { Front, FrontSession } from './fronts'
 import type { GitInfo } from './git'
 import type { PrChip } from './pr'
 import type { WaitKind } from './report'
+import { DEFAULT_STUCK_MIN } from './settings'
 
 export const TAG: Record<WaitKind, string> = {
   decision: 'Decision',
@@ -25,15 +26,19 @@ export function age(ms: number): string {
   return '<1m'
 }
 
-export type Line = { tag: string | null; title: string; age: string; detail: string | null; activity: string | null }
+export type Line = { tag: string | null; title: string; age: string; stuck: boolean; detail: string | null; activity: string | null }
 
-export function frontLine(front: Front, now: number): Line {
+// `stuckAfter`: how long a wait on the user goes before the row says it is
+// stuck, or null for never. Only a wait counts: a running row is not stuck.
+export function frontLine(front: Front, now: number, stuckAfter: number | null = DEFAULT_STUCK_MIN * MINUTE): Line {
   const since = front.waiting?.since ?? front.lastActivity
   const elapsed = now - since
+  const stuck = front.waiting !== null && stuckAfter !== null && elapsed >= stuckAfter
   return {
     tag: front.waiting ? TAG[front.waiting.kind] : null,
     title: front.name,
-    age: elapsed < MINUTE ? 'now' : `${age(elapsed)} ago`,
+    age: stuck ? `⏳ stuck ${age(elapsed)}` : elapsed < MINUTE ? 'now' : `${age(elapsed)} ago`,
+    stuck,
     detail: front.waiting ? `→ ${front.waiting.why}` : null,
     activity: front.activity,
   }
@@ -129,7 +134,9 @@ function speaker(front: Front): FrontSession | undefined {
   return (shown && front.sessions.find(one => one.report.waiting?.since === shown.since)) || newestSession(front)
 }
 
-export type ViewExtras = { pr?: Record<string, PrChip | null>; git?: Record<string, GitInfo | null> }
+// `pr` and `git` are keyed by front id; a front without one gets none.
+// `stuckAfter` is frontLine's, the user's threshold.
+export type ViewExtras = { pr?: Record<string, PrChip | null>; git?: Record<string, GitInfo | null>; stuckAfter?: number | null }
 
 // The branch, when the row's name is not already it (a topic or a rename).
 function ownBranchShown(front: Front): string | null {
@@ -193,6 +200,12 @@ export function drawnRows(panel: PanelView): PanelRow[] {
   return parts.length === 0 ? all(panel) : parts.flatMap(one => all(one.part))
 }
 
+// "Waiting on you · 2", and how many of those are stuck when any is.
+export function waitingHeader(rows: PanelRow[]): string {
+  const stuck = rows.filter(row => row.stuck).length
+  return `Waiting on you · ${rows.length}${stuck > 0 ? ` (${stuck} stuck)` : ''}`
+}
+
 // Row numbers for /coordinate. A front keeps its number for as long as it is
 // on the panel, whatever section it moves to: a number that changed between
 // reading the panel and typing it would send the words to another session.
@@ -217,7 +230,6 @@ export function withNumbers(panel: PanelView, numbers: Record<string, number>): 
   return { waiting: panel.waiting.map(number), running: panel.running.map(number), paused: panel.paused.map(number) }
 }
 
-// Extras are keyed by front id; a front without one gets none.
 export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): PanelView {
   const groups = repoGroups(fronts)
   const row = (front: Front): PanelRow => {
@@ -225,7 +237,7 @@ export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): P
     const git = extras.git?.[front.id] ?? null
     const reported = front.sessions.some(one => one.reported)
     const waitsOnPr = prWait(front, pr)
-    const line = frontLine(front, now)
+    const line = frontLine(front, now, extras.stuckAfter === undefined ? DEFAULT_STUCK_MIN * MINUTE : extras.stuckAfter)
     return {
       id: front.id,
       number: 0,

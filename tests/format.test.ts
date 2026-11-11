@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { age, assignNumbers, drillDown, frontLine, gitView, repoGroups, summaryLine, toView } from '../src/format'
+import { age, assignNumbers, drillDown, frontLine, gitView, repoGroups, summaryLine, toView, waitingHeader } from '../src/format'
 import type { GitInfo } from '../src/git'
 import type { Front, FrontSession } from '../src/fronts'
 import type { Report, Waiting } from '../src/report'
@@ -56,7 +56,7 @@ test('ages read in the largest whole unit', async () => {
 })
 
 test('a front waiting for a push shows the OK push tag and why', async () => {
-  const line = frontLine(front(wait('ok-push')), NOW)
+  const line = frontLine(front(wait('ok-push')), NOW, null)
   expect(line.tag).toBe('OK push')
   expect(line.age).toBe('12m ago')
   expect(line.detail).toBe('→ pide push y PR')
@@ -157,6 +157,33 @@ test('a front with an open PR and no session on it waits for the user', async ()
 test('a row says how long ago in words', async () => {
   expect(frontLine(front(null), NOW).age).toBe('1m ago')
   expect(frontLine({ ...front(null), lastActivity: NOW - 5_000 }, NOW).age).toBe('now')
+})
+
+const waitingFor = (ms: number): Front => {
+  const base = front(null)
+  const shown = { ...wait('decision'), since: NOW - ms }
+  return { ...base, section: 'waiting', waiting: shown, sessions: base.sessions.map(s => ({ ...s, report: { ...s.report, state: 'waiting', waiting: shown } })) }
+}
+
+test('a wait longer than five minutes is stuck, and its age says so', async () => {
+  expect(frontLine(waitingFor(4 * 60_000), NOW)).toMatchObject({ stuck: false, age: '4m ago' })
+  expect(frontLine(waitingFor(12 * 60_000), NOW)).toMatchObject({ stuck: true, age: '⏳ stuck 12m' })
+})
+
+test('the stuck threshold is the user setting, and null turns it off', async () => {
+  expect(frontLine(waitingFor(3 * 60_000), NOW, 2 * 60_000).stuck).toBe(true)
+  expect(frontLine(waitingFor(60 * 60_000), NOW, null)).toMatchObject({ stuck: false, age: '1h ago' })
+})
+
+test('a running front is never stuck, however long ago it moved', async () => {
+  expect(frontLine({ ...front(null), lastActivity: NOW - 60 * 60_000 }, NOW).stuck).toBe(false)
+})
+
+test('the waiting header counts the stuck rows when there are any', async () => {
+  const view = toView([waitingFor(12 * 60_000), { ...waitingFor(60_000), id: 'other' }], NOW)
+  expect(waitingHeader(view.waiting)).toBe('Waiting on you · 2 (1 stuck)')
+  expect(waitingHeader(toView([waitingFor(60_000)], NOW).waiting)).toBe('Waiting on you · 1')
+  expect(waitingHeader(toView([waitingFor(12 * 60_000)], NOW, { stuckAfter: null }).waiting)).toBe('Waiting on you · 1')
 })
 
 test('the summary names the branch first when the front is named by its topic', async () => {

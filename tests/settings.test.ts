@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { approvalCheckFrom, refreshMsFrom } from '../src/settings'
+import { approvalCheckFrom, refreshMsFrom, stuckMsFrom } from '../src/settings'
 
 test('no refresh interval set means 5 seconds', async () => {
   expect(refreshMsFrom({})).toBe(5_000)
@@ -25,4 +25,17 @@ test('the approval check is drafted by default, and takes only its three values'
   expect(approvalCheckFrom({ approvalCheck: 'off' })).toBe('off')
   expect(approvalCheckFrom({ approvalCheck: 'loose' })).toBe('drafted')
   expect(approvalCheckFrom({ approvalCheck: 3 })).toBe('drafted')
+})
+
+test('a wait is stuck after 5 minutes unless the user set another threshold', async () => {
+  expect(stuckMsFrom({})).toBe(300_000)
+  expect(stuckMsFrom({ stuckMinutes: 10 })).toBe(600_000)
+  expect(stuckMsFrom({ stuckMinutes: '2' })).toBe(120_000)
+  expect(stuckMsFrom({ stuckMinutes: 'later' })).toBe(300_000)
+  expect(stuckMsFrom({ stuckMinutes: 99_999 })).toBe(86_400_000)
+})
+
+test('a stuck threshold of 0 turns the badge off', async () => {
+  expect(stuckMsFrom({ stuckMinutes: 0 })).toBe(null)
+  expect(stuckMsFrom({ stuckMinutes: -3 })).toBe(null)
 })

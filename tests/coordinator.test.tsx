@@ -211,7 +211,10 @@ test('fronts from two repositories are grouped by repo in alphabetical order, ea
   expect(at('blog')).toBeLessThan(at('1 · Review'))
   expect(at('1 · Review')).toBeLessThan(at('repo'))
   expect(at('repo')).toBeLessThan(at('2 · Decision'))
-  expect(all('Waiting on you · 1')).toBe(2)
+  // blog's wait is ten minutes old: past the five that make it stuck.
+  expect(all('Waiting on you · 1 (1 stuck)')).toBe(1)
+  expect(all('Waiting on you · 1')).toBe(1)
+  expect(texts).toContain('  ⏳ stuck 10m')
   expect(all('Running · 1')).toBe(1)
   expect(all('Running · 0')).toBe(0)
   expect(at('Running · 1')).toBeGreaterThan(at('repo'))

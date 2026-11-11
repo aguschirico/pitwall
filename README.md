@@ -123,6 +123,11 @@ show. Built and tested on Claude Code 2.1.322 on macOS.
   Whatever you pick, a session waiting on an approval takes no message, and what the model drafts
   still needs your **Send** in the dialog. Set it the same way:
   `echo '{"approvalCheck":"strict"}' | claude plugin configure pitwall@aguschirico --values-stdin`.
+- **Stuck after (minutes)**: a session waiting on you for longer than this shows
+  `⏳ stuck 12m` in amber instead of its age, and its section says how many are stuck:
+  `Waiting on you · 2 (1 stuck)`. 5 by default, `0` turns the badge off. Only waits count: a
+  session that is running is never stuck. Set it the same way:
+  `echo '{"stuckMinutes":"10"}' | claude plugin configure pitwall@aguschirico --values-stdin`.
 
 ## How it works
 
