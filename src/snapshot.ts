@@ -31,8 +31,8 @@ export type Snapshot = {
   git: Record<string, GitInfo | null>
 }
 
-export function snapshotPath(home: string): string {
-  return `${home}/.claude/pitwall/snapshot.json`
+export function snapshotPath(claudeHome: string): string {
+  return `${claudeHome}/pitwall/snapshot.json`
 }
 
 function field(value: unknown, key: string): unknown {
@@ -72,9 +72,9 @@ export function parseSnapshot(text: string): Snapshot | null {
   }
 }
 
-export async function readSnapshot(io: Io, home: string): Promise<Snapshot | null> {
+export async function readSnapshot(io: Io, claudeHome: string): Promise<Snapshot | null> {
   try {
-    return parseSnapshot(await io.read(snapshotPath(home)))
+    return parseSnapshot(await io.read(snapshotPath(claudeHome)))
   } catch {
     return null
   }
@@ -82,10 +82,10 @@ export async function readSnapshot(io: Io, home: string): Promise<Snapshot | nul
 
 // Reports of sessions gone for longer than the pause window are deleted, so
 // the folder (read on every computed refresh) stays the size of recent work.
-async function pruneOld(io: Io, home: string, reports: Report[], live: LiveSession[], now: number): Promise<Report[]> {
+async function pruneOld(io: Io, claudeHome: string, reports: Report[], live: LiveSession[], now: number): Promise<Report[]> {
   const liveIds = new Set(live.map(one => one.sessionId))
   const old = reports.filter(one => !liveIds.has(one.sessionId) && now - one.updatedAt > PAUSE_WINDOW_MS)
-  await Promise.all(old.map(one => io.run(['rm', '-f', reportPath(home, one.sessionId)]).catch(() => null)))
+  await Promise.all(old.map(one => io.run(['rm', '-f', reportPath(claudeHome, one.sessionId)]).catch(() => null)))
   return reports.filter(one => !old.includes(one))
 }
 
@@ -115,17 +115,17 @@ async function prFor(io: Io, front: Front, previous: Snapshot | null, now: numbe
   return { pr: await fetchPr(io, front.repoRoot, front.branch), at: now }
 }
 
-async function sessionsNow(io: Io, home: string, now: number) {
-  const live = await readLiveSessions(io, home)
-  const reports = await pruneOld(io, home, await readReports(io, home), live, now)
+async function sessionsNow(io: Io, claudeHome: string, now: number) {
+  const live = await readLiveSessions(io, claudeHome)
+  const reports = await pruneOld(io, claudeHome, await readReports(io, claudeHome), live, now)
   const reported = new Set(reports.map(one => one.sessionId))
-  const inferred = await Promise.all(live.filter(one => !reported.has(one.sessionId)).map(one => inferReport(io, home, one)))
+  const inferred = await Promise.all(live.filter(one => !reported.has(one.sessionId)).map(one => inferReport(io, claudeHome, one)))
   return { live, reports, inferred }
 }
 
 // `previous` is the last snapshot read, stale or not: it lends recent PR chips.
-export async function computeSnapshot($: Engine, io: Io, home: string, now: number, previous: Snapshot | null = null): Promise<Snapshot> {
-  const { live, reports, inferred } = await sessionsNow(io, home, now)
+export async function computeSnapshot($: Engine, io: Io, claudeHome: string, now: number, previous: Snapshot | null = null): Promise<Snapshot> {
+  const { live, reports, inferred } = await sessionsNow(io, claudeHome, now)
   const fronts = buildFronts({ reports, inferred, live, overrides: await readOverrides($), now })
   const judged = await Promise.all(
     fronts.map(async front => {
@@ -145,6 +145,6 @@ export async function computeSnapshot($: Engine, io: Io, home: string, now: numb
     prAt: Object.fromEntries(judged.flatMap(one => (one.prAt === null ? [] : [[one.front.id, one.prAt]]))),
     git: Object.fromEntries(judged.map(one => [one.front.id, one.git])),
   }
-  await $.fs.write(snapshotPath(home), JSON.stringify(snapshot))
+  await $.fs.write(snapshotPath(claudeHome), JSON.stringify(snapshot))
   return snapshot
 }

@@ -21,7 +21,7 @@ function engine(on: TestOn, world: World) {
   const reports: Report[] = []
   const renames: string[] = []
   const clock = mock.clock(on)
-  on('env.get', () => ({ value: '/h' }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/h' : undefined }))
   on('session.id', () => ({ value: 's1' }))
   on('session.cwd', () => ({ value: '/repo' }))
   on('session.repo', () => ({ value: null }))

@@ -63,6 +63,8 @@ type World = {
   confirm?: string
   asked: string[]
   slowGhMs?: number
+  // CLAUDE_CONFIG_DIR, when the test runs under another config.
+  configDir?: string
   failPs?: boolean
   noCodeCli?: boolean
 }
@@ -86,7 +88,7 @@ function processAnswer(world: World, argv: readonly string[]): Ran {
 function engine(on: TestOn, world: World): MockClock {
   const clock = mock.clock(on, { now: NOW })
   mock.store(on)
-  mock.env(on, { HOME })
+  mock.env(on, world.configDir ? { HOME, CLAUDE_CONFIG_DIR: world.configDir } : { HOME })
   on('session.id', () => ({ value: 'coord' }))
   on('session.repo', () => ({ value: null }))
   on('fs.write', (_, e) => {
@@ -227,6 +229,23 @@ test('fronts from one repository draw no headers', async ($, on) => {
 
   expect(await ui.find({ type: 'Text', text: /^repo$/ })).toBe(undefined)
   expect(await ui.find({ type: 'Text', text: /Running · / })).toBeDefined()
+  await ui.unmount()
+})
+
+test('under CLAUDE_CONFIG_DIR the panel reads that config, not ~/.claude', async ($, on) => {
+  const seen = world()
+  const moved: Record<string, string> = {}
+  for (const [path, text] of Object.entries(seen.files)) moved[path.replace(`${HOME}/.claude`, '/demo/config')] = text
+  seen.files = moved
+  seen.configDir = '/demo/config'
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect(await ui.find({ type: 'Text', text: /Waiting on you · 1/ })).toBeDefined()
+  expect(Object.keys(seen.files).some(path => path.startsWith('/demo/config/pitwall/'))).toBe(true)
+  expect(Object.keys(seen.files).some(path => path.startsWith(`${HOME}/.claude`))).toBe(false)
   await ui.unmount()
 })
 
@@ -781,7 +800,7 @@ test('/coordinate with a number nobody has says so', async ($, on) => {
   await clock.settle()
   const done = await $.command.run(coordinate('9 hola'))
 
-  expect(done.text).toBe('No row has number 9. There are 3.')
+  expect(done.text).toBe('No row has number 9 on the panel.')
 })
 
 test('every row has a number: a running front takes words too, a paused one has no session', async ($, on) => {
@@ -800,6 +819,23 @@ test('every row has a number: a running front takes words too, a paused one has 
 
   const paused = await $.command.run(coordinate('3 go on'))
   expect(paused.text).toBe('"old" has no open session.')
+})
+
+test('a front keeps its number when it moves to another section', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  // search (1) stops waiting and runs: it is drawn after docs (2) now, and keeps 1.
+  seen.files[`${REPORTS}/search.json`] = serializeReport({ ...SEARCH, state: 'running', waiting: null, updatedAt: NOW - 120_000 })
+  await clock.advance(REFRESH_MS + 1_000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^1 ● $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^2 ● $/ })).toBeDefined()
+  await ui.unmount()
+
+  const done = await $.command.run(coordinate('2 rerun the tests'))
+  expect(done.text).toBe('Sent to "docs".')
 })
 
 test('/coordinate without text explains how to use it', async ($, on) => {

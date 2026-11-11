@@ -8,8 +8,8 @@ type Engine = Parameters<Hook<'session.start'>>[0]
 
 type RegistryName = { sessionId: string; name: string; nameSource: string }
 
-async function registryNames($: Engine, home: string): Promise<RegistryName[]> {
-  const dir = `${home}/.claude/sessions`
+async function registryNames($: Engine, claudeHome: string): Promise<RegistryName[]> {
+  const dir = `${claudeHome}/sessions`
   const names: RegistryName[] = []
   for (const entry of await $.fs.list(dir)) {
     if (!entry.name.endsWith('.json')) continue
@@ -27,9 +27,9 @@ const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b
 
 // Whether `name` may be given to this session now: not when the user named
 // it (a /rename this mod did not do), and not when another session has it.
-export async function mayRename($: Engine, home: string, sessionId: string, autoName: string | null, name: string): Promise<boolean> {
+export async function mayRename($: Engine, claudeHome: string, sessionId: string, autoName: string | null, name: string): Promise<boolean> {
   try {
-    const names = await registryNames($, home)
+    const names = await registryNames($, claudeHome)
     const own = names.find(one => one.sessionId === sessionId)
     if (own && own.nameSource === 'user' && own.name !== autoName) return false
     return !names.some(one => one.sessionId !== sessionId && sameName(one.name, name))

@@ -5,7 +5,7 @@ import { atom, read, update } from 'claude-code'
 import type { Hook, On } from 'claude-code'
 
 import type { PanelRow, PanelView } from '../types'
-import { drawnRows, repoParts } from './format'
+import { repoParts } from './format'
 import { goToFront } from './focus'
 import { gitSection } from './pane-git'
 import { frontRow, type Elements, type RowActions } from './pane-rows'
@@ -20,7 +20,7 @@ const DEFAULT_ROWS = 40
 
 // Change a tag when its value's fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-6' })
+const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-7' })
 const selected = atom({ plugin: 'pitwall', key: 'selected' } as const, null, { shape: 'selected-1' })
 const gitOpen = atom({ plugin: 'pitwall', key: 'gitOpen' } as const, null, { shape: 'git-open-1' })
 
@@ -93,8 +93,7 @@ async function drawPanel($: Engine, els: Elements, rows: number) {
   })
   const draw = (row: PanelRow, lead: string, leadColor: string | undefined, dim: boolean) =>
     frontRow(els, row, { lead, leadColor, dim, isOpen: open === row.id, isGitOpen: gitRow?.id === row.id }, actions(row.id))
-  const numbers = new Map(drawnRows(panel).map((row, index) => [row.id, index + 1]))
-  const numberOf = (row: PanelRow) => numbers.get(row.id) ?? 0
+  const numberOf = (row: PanelRow) => row.number
   const repos = repoParts(panel)
   const body =
     repos.length === 0

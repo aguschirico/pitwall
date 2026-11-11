@@ -44,7 +44,7 @@ test('a half written report between two good ones is skipped', async () => {
     [`${DIR}/b.json`]: '{"v":1,"sess',
     [`${DIR}/c.json`]: serializeReport({ ...REPORT, sessionId: 'c' }),
   })
-  const reports = await readReports(io, '/h')
+  const reports = await readReports(io, '/h/.claude')
   expect(reports.map(one => one.sessionId).sort()).toEqual(['a', 'c'])
 })
 
@@ -56,12 +56,12 @@ test('a registered session whose process is gone is not live', async () => {
     { '/h/.claude/sessions/10.json': SESSION(10, 'a'), '/h/.claude/sessions/11.json': SESSION(11, 'b'), '/h/.claude/sessions/10.abc.key': 'k' },
     argv => (argv[0] === 'ps' ? ok('   10\n') : ok('')),
   )
-  const lives = await readLiveSessions(io, '/h')
+  const lives = await readLiveSessions(io, '/h/.claude')
   expect(lives.map(one => one.sessionId)).toEqual(['a'])
 })
 
 test('the transcript of a session lives under its start folder', async () => {
-  expect(transcriptPath('/h', '/Users/me/src/app/.worktrees/f2.1', 's')).toBe(
+  expect(transcriptPath('/h/.claude', '/Users/me/src/app/.worktrees/f2.1', 's')).toBe(
     '/h/.claude/projects/-Users-me-src-app--worktrees-f2-1/s.jsonl',
   )
 })
@@ -82,7 +82,7 @@ test('a session without a report is inferred from its transcript tail', async ()
     return ok('')
   })
   const live = { sessionId: 's', name: 'n', pid: 1, status: 'idle', cwd: '/repo', updatedAt: 7 }
-  const inferred = await inferReport(io, '/h', live)
+  const inferred = await inferReport(io, '/h/.claude', live)
 
   expect(inferred.title).toBe('Search handoff')
   expect(inferred.branch).toBe('feat/f')
@@ -96,5 +96,5 @@ test('the registry says whether the user named the session', async () => {
     { '/h/.claude/sessions/10.json': JSON.stringify({ pid: 10, sessionId: 'a', cwd: '/repo', name: 'Coordinador', nameSource: 'user' }) },
     argv => (argv[0] === 'ps' ? ok('10\n') : ok('')),
   )
-  expect((await readLiveSessions(io, '/h'))[0]?.nameSource).toBe('user')
+  expect((await readLiveSessions(io, '/h/.claude'))[0]?.nameSource).toBe('user')
 })

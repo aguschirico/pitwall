@@ -48,7 +48,7 @@ test('a report with an unknown wait kind is rejected', async () => {
 })
 
 test('the report path lives under the user claude folder', async () => {
-  expect(reportPath('/h', 'abc')).toBe('/h/.claude/pitwall/reports/abc.json')
+  expect(reportPath('/h/.claude', 'abc')).toBe('/h/.claude/pitwall/reports/abc.json')
 })
 
 test('a report written before messages and steps were kept still parses', async () => {

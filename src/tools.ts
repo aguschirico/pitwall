@@ -3,7 +3,7 @@
 // only in the coordinating session.
 import type { Hook, On } from 'claude-code'
 
-import { currentFronts, currentRowIds, hasRefreshed, isCoordinating, refresh } from './coordinator'
+import { currentFronts, frontIdForNumber, hasRefreshed, isCoordinating, refresh } from './coordinator'
 import { readOverrides, writeOverrides } from './overrides'
 import { TAG } from './format'
 import type { Front, FrontOverrides, FrontSession } from './fronts'
@@ -137,15 +137,14 @@ function frontSessionFor(to: string): FrontSession | null {
 const COORDINATE_USAGE =
   'Usage: /coordinate <number> <text>, or /coordinate <number> go to jump to that session, with the row number on the panel.'
 
-// "/coordinate 2 pick B": the text goes to the front drawn as row 2, whatever
+// "/coordinate 2 pick B": the text goes to the front shown with number 2, whatever
 // its section, under the same rules as send_to_front, without the model in between.
 async function coordinate($: Engine, args: string): Promise<string> {
   if (!isCoordinating()) return 'This session does not have the panel open: run /panel first.'
   const match = /^\s*(\d+)\s+(\S[\s\S]*)$/.exec(args)
   if (!match) return COORDINATE_USAGE
-  const rows = currentRowIds()
-  const id = rows[Number(match[1]) - 1]
-  if (!id) return `No row has number ${match[1]}. There are ${rows.length}.`
+  const id = frontIdForNumber(Number(match[1]))
+  if (!id) return `No row has number ${match[1]} on the panel.`
   const text = (match[2] ?? '').trim()
   return /^go$/i.test(text) ? goToFront($, id) : sendToFront($, id, text, 'typed')
 }

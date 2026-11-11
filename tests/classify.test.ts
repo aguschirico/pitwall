@@ -56,7 +56,7 @@ type ModelAnswer = OpEventResult<'model.complete'>
 function engine(on: TestOn, model: (clock: MockClock) => ModelAnswer | Promise<ModelAnswer>) {
   const reports: Report[] = []
   const clock = mock.clock(on)
-  on('env.get', () => ({ value: '/h' }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/h' : undefined }))
   on('session.id', () => ({ value: 's1' }))
   on('session.repo', () => ({ value: null }))
   on('process.run', () => ({

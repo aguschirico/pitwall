@@ -186,12 +186,35 @@ export function repoParts(panel: PanelView): RepoPart[] {
     .map(group => ({ group, part: { waiting: of(panel.waiting, group.label), running: of(panel.running, group.label), paused: of(panel.paused, group.label) } }))
 }
 
-// Every row in the order the pane draws it, which is the order it is numbered
-// in: /coordinate <n> reaches the row drawn with n, whatever its section.
+// Every row in the order the pane draws it.
 export function drawnRows(panel: PanelView): PanelRow[] {
   const all = (part: PanelView) => [...part.waiting, ...part.running, ...part.paused]
   const parts = repoParts(panel)
   return parts.length === 0 ? all(panel) : parts.flatMap(one => all(one.part))
+}
+
+// Row numbers for /coordinate. A front keeps its number for as long as it is
+// on the panel, whatever section it moves to: a number that changed between
+// reading the panel and typing it would send the words to another session.
+// A new front takes the lowest free number, in the order rows are drawn.
+export function assignNumbers(previous: Record<string, number>, rows: PanelRow[]): Record<string, number> {
+  const present = new Set(rows.map(row => row.id))
+  const kept: Record<string, number> = {}
+  for (const [id, number] of Object.entries(previous)) if (present.has(id)) kept[id] = number
+  const taken = new Set(Object.values(kept))
+  let next = 1
+  for (const row of rows) {
+    if (kept[row.id] !== undefined) continue
+    while (taken.has(next)) next += 1
+    kept[row.id] = next
+    taken.add(next)
+  }
+  return kept
+}
+
+export function withNumbers(panel: PanelView, numbers: Record<string, number>): PanelView {
+  const number = (row: PanelRow): PanelRow => ({ ...row, number: numbers[row.id] ?? 0 })
+  return { waiting: panel.waiting.map(number), running: panel.running.map(number), paused: panel.paused.map(number) }
 }
 
 // Extras are keyed by front id; a front without one gets none.
@@ -205,6 +228,7 @@ export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): P
     const line = frontLine(front, now)
     return {
       id: front.id,
+      number: 0,
       group: groups.get(repoKey(front)) ?? null,
       ...line,
       tag: waitsOnPr ? 'PR' : line.tag,

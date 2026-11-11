@@ -153,6 +153,6 @@ most once a minute, the snapshot keeping when it was fetched (`prAt`) so the nex
 
 ### Portability
 
-- Nothing repo specific: paths under `~/.claude` and what the transcripts carry.
+- Nothing repo specific: paths under `~/.claude` (or the folder `CLAUDE_CONFIG_DIR` names, where Claude Code keeps the registry and transcripts of that config) and what the transcripts carry.
 - PR and CI chips through `gh` when it is installed and the branch has a PR; otherwise they do not
   show.

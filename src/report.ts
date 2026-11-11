@@ -55,12 +55,12 @@ export type Report = {
 const WAIT_KINDS: readonly string[] = ['decision', 'ok-push', 'manual', 'review']
 const STATES: readonly string[] = ['running', 'waiting', 'idle', 'ended']
 
-export function reportDir(home: string): string {
-  return `${home}/.claude/pitwall/reports`
+export function reportDir(claudeHome: string): string {
+  return `${claudeHome}/pitwall/reports`
 }
 
-export function reportPath(home: string, sessionId: string): string {
-  return `${reportDir(home)}/${sessionId}.json`
+export function reportPath(claudeHome: string, sessionId: string): string {
+  return `${reportDir(claudeHome)}/${sessionId}.json`
 }
 
 export function serializeReport(report: Report): string {

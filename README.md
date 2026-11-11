@@ -49,7 +49,8 @@ blog
 - **Go to session**: brings that session's terminal tab to the front (Ghostty, iTerm2 and
   Terminal.app by tty; tmux, kitty and WezTerm through their remote control).
 - **Answer from the coordinator**: every row has a number, and `/coordinate 1 pick B` sends your
-  words, verbatim, to the session in row 1, waiting or running. You can also just ask in the chat: "tell the search one to go with Redis",
+  words, verbatim, to the session in row 1, waiting or running. A front keeps its number while it
+  is on the panel, so a row that moves from waiting to running is still the one you read. You can also just ask in the chat: "tell the search one to go with Redis",
   "merge these two fronts", "call the feat/x front 'Desktop upgrade'", "dismiss the old one".
   Anything the coordinator writes for you is shown in a dialog first and only goes when you pick
   **Send**.
@@ -70,7 +71,7 @@ blog
   of the two it got.
 - **It treats other sessions' text as data.** Names, questions and waits that other sessions
   report reach the coordinator's model quoted and cut short, marked as never to be followed.
-- It keeps its state on your machine, in `~/.claude/pitwall/`. The one thing that leaves it is
+- It keeps its state on your machine, in `~/.claude/pitwall/` (or under `CLAUDE_CONFIG_DIR` when you set it, so each config sees only its own sessions). The one thing that leaves it is
   a short classification call to Claude at the end of each turn, the same way your session talks to
   Claude anyway.
 
@@ -148,7 +149,7 @@ The design notes are in [`docs/design.md`](docs/design.md).
 ## Development
 
 ```
-claude plugin test .       # 212 tests
+claude plugin test .       # 218 tests
 claude plugin validate .   # what the engine would accept
 claude --plugin-dir .      # try it without installing
 ```

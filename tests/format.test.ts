@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { age, drillDown, frontLine, gitView, repoGroups, summaryLine, toView } from '../src/format'
+import { age, assignNumbers, drillDown, frontLine, gitView, repoGroups, summaryLine, toView } from '../src/format'
 import type { GitInfo } from '../src/git'
 import type { Front, FrontSession } from '../src/fronts'
 import type { Report, Waiting } from '../src/report'
@@ -199,4 +199,11 @@ test('repositories come in alphabetical order, whichever waits longest', async (
   }
   const view = toView([waiting('/w/zeta#a', '/w/zeta', NOW - 3_600_000), waiting('/w/alpha#b', '/w/alpha', NOW - 60_000)], NOW)
   expect(view.waiting.map(row => row.group?.label)).toEqual(['alpha', 'zeta'])
+})
+
+test('a front keeps its number, and a new one takes the lowest free number', async () => {
+  const rows = (ids: string[]) => toView([], NOW).waiting.concat(ids.map(id => ({ ...toView([front(null)], NOW).running[0]!, id })))
+  const first = assignNumbers({}, rows(['a', 'b', 'c']))
+  expect(first).toEqual({ a: 1, b: 2, c: 3 })
+  expect(assignNumbers(first, rows(['d', 'c', 'a']))).toEqual({ a: 1, c: 3, d: 2 })
 })

@@ -6,6 +6,7 @@ import type { Hook, On } from 'claude-code'
 import { classifyTurn, fallbackClassification, type Classification } from './classify'
 import { isCoordinating } from './coordinator'
 import { mayRename, renameSession } from './naming'
+import { claudeHomeOf } from './paths'
 import { parseTail, transcriptPath } from './registry'
 import { cutMessage, parseReport, PERMISSION_PREFIX, reportPath, serializeReport, type Report, type TerminalInfo, type Waiting } from './report'
 import { cutAtWord } from './untrusted'
@@ -19,7 +20,7 @@ const TAIL_BYTES = 100_000
 const SUMMARY_FIELDS = ['command', 'file_path', 'path', 'pattern', 'url', 'description', 'prompt']
 
 let current: Report | null = null
-let home: string | null = null
+let claudeHome: string | null = null
 let lastWrite = 0
 let turnSeq = 0
 // The folder the session started in: its transcript lives under it, whatever the cwd is now.
@@ -52,11 +53,11 @@ function firstLine(text: string): string | null {
 }
 
 export async function saveReport($: Engine, patch: Partial<Report>): Promise<void> {
-  if (!current || !home) return
+  if (!current || !claudeHome) return
   current = { ...current, ...patch, updatedAt: Date.now() }
   lastWrite = current.updatedAt
   try {
-    await $.fs.write(reportPath(home, current.sessionId), serializeReport(current))
+    await $.fs.write(reportPath(claudeHome, current.sessionId), serializeReport(current))
   } catch {
     // A report that could not be written only goes stale; the session goes on.
   }
@@ -73,9 +74,9 @@ async function currentBranch($: Engine, cwd: string): Promise<string | null> {
 }
 
 async function earlierReport($: Engine, sessionId: string): Promise<Report | null> {
-  if (!home) return null
+  if (!claudeHome) return null
   try {
-    const found = parseReport(await $.fs.read(reportPath(home, sessionId)))
+    const found = parseReport(await $.fs.read(reportPath(claudeHome, sessionId)))
     return found?.sessionId === sessionId && found.state !== 'ended' ? found : null
   } catch {
     return null
@@ -103,7 +104,7 @@ async function terminalOf($: Engine): Promise<TerminalInfo> {
 // reported (its title, its wait) is kept, not reset.
 export async function startReport($: Engine, cwd: string, sessionId?: string): Promise<void> {
   try {
-    home = (await $.env.get('HOME')) ?? null
+    claudeHome = await claudeHomeOf($)
     startCwd = startCwd ?? cwd
     const id = sessionId ?? (await $.session.id())
     const repo = await $.session.repo()
@@ -188,9 +189,9 @@ async function reportTurnEnd($: Engine, answer: string, isAnswered: boolean): Pr
 // The title Claude Code gave the conversation (what its terminal tab shows),
 // from the tail of the session's own transcript.
 async function claudeTitle($: Engine): Promise<string | null> {
-  if (!current || !home || !startCwd) return current?.aiTitle ?? null
+  if (!current || !claudeHome || !startCwd) return current?.aiTitle ?? null
   try {
-    const run = await $.process.run(['tail', '-c', String(TAIL_BYTES), transcriptPath(home, startCwd, current.sessionId)])
+    const run = await $.process.run(['tail', '-c', String(TAIL_BYTES), transcriptPath(claudeHome, startCwd, current.sessionId)])
     return (run.exitCode === 0 ? parseTail(run.stdout).title : null) ?? current.aiTitle ?? null
   } catch {
     return current.aiTitle ?? null
@@ -201,10 +202,10 @@ async function claudeTitle($: Engine): Promise<string | null> {
 // user named it or another session has that name. The coordinator keeps its
 // name: it talks about the other fronts, so its topic is usually theirs.
 async function adoptTopic($: Engine, topic: string): Promise<void> {
-  if (!current || !home || topic === '' || topic === current.topic) return
+  if (!current || !claudeHome || topic === '' || topic === current.topic) return
   await saveReport($, { topic })
   if (isCoordinating()) return
-  if (!(await mayRename($, home, current.sessionId, current.autoName ?? null, topic))) return
+  if (!(await mayRename($, claudeHome, current.sessionId, current.autoName ?? null, topic))) return
   if (await renameSession($, topic)) await saveReport($, { autoName: topic })
 }
 

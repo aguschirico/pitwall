@@ -13,7 +13,7 @@ function engine(on: TestOn, options: Options = {}) {
   const reports: Report[] = []
   const ids = [...(options.ids ?? ['s1'])]
   const branches = [...(options.branches ?? ['feat/x'])]
-  on('env.get', () => ({ value: '/h' }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/h' : undefined }))
   on('session.id', () => ({ value: ids.length > 1 ? ids.shift() ?? 's1' : ids[0] ?? 's1' }))
   on('session.cwd', () => ({ value: '/repo' }))
   on('session.repo', () => ({ value: { root: '/repo', remote: null, internal: false, name: null } }))

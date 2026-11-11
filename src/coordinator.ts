@@ -5,10 +5,11 @@
 import { atom, read, update } from 'claude-code'
 import type { Hook, On, Timer } from 'claude-code'
 
-import { drawnRows, toView } from './format'
+import { assignNumbers, drawnRows, toView, withNumbers } from './format'
 import { buildFronts, type Front } from './fronts'
-import { PANE_ID, PANE_TITLE, setView } from './pane'
 import { readOverrides } from './overrides'
+import { PANE_ID, PANE_TITLE, setView } from './pane'
+import { claudeHomeOf } from './paths'
 import { ioFrom, type Io } from './registry'
 import { computeSnapshot, readSnapshot, type Snapshot } from './snapshot'
 import { DEFAULT_REFRESH_S } from './settings'
@@ -35,32 +36,32 @@ let ticker: Timer | null = null
 let refreshing = false
 let coordinating = false
 let lastFronts: Front[] = []
-let lastRowIds: string[] = []
+let rowNumbers: Record<string, number> = {}
 let refreshedOnce = false
 
 export function currentFronts(): Front[] {
   return lastFronts
 }
 
-// The ids of every row in the order the panel numbers them.
-export function currentRowIds(): string[] {
-  return lastRowIds
+// The front drawn with this number on the panel, if any.
+export function frontIdForNumber(number: number): string | undefined {
+  return Object.entries(rowNumbers).find(([, one]) => one === number)?.[0]
 }
 
 // The shared snapshot when another panel wrote it within this panel's own
 // interval, else a fresh one this panel computes and writes for the others.
 // The stale one still lends its PR chips that are recent enough.
-async function latestSnapshot($: Engine, io: Io, home: string, now: number): Promise<Snapshot> {
-  const shared = await readSnapshot(io, home)
+async function latestSnapshot($: Engine, io: Io, claudeHome: string, now: number): Promise<Snapshot> {
+  const shared = await readSnapshot(io, claudeHome)
   if (shared && now - shared.at < refreshMs) return shared
-  return computeSnapshot($, io, home, now, shared)
+  return computeSnapshot($, io, claudeHome, now, shared)
 }
 
 async function refreshOnce($: Engine): Promise<void> {
   const io = ioFrom($)
   const now = await $.clock.now()
-  const home = (await $.env.get('HOME')) ?? ''
-  const snapshot = await latestSnapshot($, io, home, now)
+  const claudeHome = (await claudeHomeOf($)) ?? ''
+  const snapshot = await latestSnapshot($, io, claudeHome, now)
   const self = await $.session.id()
   const others = <T extends { sessionId: string }>(list: T[]) => list.filter(one => one.sessionId !== self)
   lastFronts = buildFronts({
@@ -70,8 +71,9 @@ async function refreshOnce($: Engine): Promise<void> {
     overrides: await readOverrides($),
     now,
   })
-  const panel = toView(lastFronts, now, { pr: snapshot.pr, git: snapshot.git })
-  lastRowIds = drawnRows(panel).map(row => row.id)
+  const view = toView(lastFronts, now, { pr: snapshot.pr, git: snapshot.git })
+  rowNumbers = assignNumbers(rowNumbers, drawnRows(view))
+  const panel = withNumbers(view, rowNumbers)
   await setView($, panel)
   refreshedOnce = true
 }

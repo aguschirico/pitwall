@@ -32,6 +32,8 @@ export type PanelGroup = { label: string; color: string }
 
 export type PanelRow = {
   id: string
+  // The row's number for /coordinate: kept while the front is on the panel.
+  number: number
   group: PanelGroup | null
   tag: string | null
   title: string

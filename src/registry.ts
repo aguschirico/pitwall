@@ -51,8 +51,8 @@ async function readJsonFiles(io: Io, dir: string): Promise<string[]> {
   return texts.filter(text => text !== '')
 }
 
-export async function readReports(io: Io, home: string): Promise<Report[]> {
-  const texts = await readJsonFiles(io, reportDir(home))
+export async function readReports(io: Io, claudeHome: string): Promise<Report[]> {
+  const texts = await readJsonFiles(io, reportDir(claudeHome))
   return texts.map(parseReport).filter((report): report is Report => report !== null)
 }
 
@@ -88,15 +88,15 @@ async function alivePids(io: Io, pids: number[]): Promise<Set<number>> {
   return new Set(run.stdout.split('\n').map(line => Number(line.trim())).filter(pid => pid > 0))
 }
 
-export async function readLiveSessions(io: Io, home: string): Promise<LiveSession[]> {
-  const texts = await readJsonFiles(io, `${home}/.claude/sessions`)
+export async function readLiveSessions(io: Io, claudeHome: string): Promise<LiveSession[]> {
+  const texts = await readJsonFiles(io, `${claudeHome}/sessions`)
   const sessions = texts.map(parseLive).filter((one): one is LiveSession => one !== null)
   const alive = await alivePids(io, sessions.map(one => one.pid))
   return sessions.filter(one => alive.has(one.pid))
 }
 
-export function transcriptPath(home: string, cwd: string, sessionId: string): string {
-  return `${home}/.claude/projects/${cwd.replace(/[/.]/g, '-')}/${sessionId}.jsonl`
+export function transcriptPath(claudeHome: string, cwd: string, sessionId: string): string {
+  return `${claudeHome}/projects/${cwd.replace(/[/.]/g, '-')}/${sessionId}.jsonl`
 }
 
 type TranscriptTail = { title: string | null; branch: string | null; cwd: string | null; lastText: string | null }
@@ -141,8 +141,8 @@ async function repoRootOf(io: Io, cwd: string): Promise<string | null> {
   return dir.endsWith('/.git') ? dir.slice(0, -'/.git'.length) : dir
 }
 
-export async function inferReport(io: Io, home: string, live: LiveSession): Promise<Report> {
-  const run = await io.run(['tail', '-c', String(TAIL_BYTES), transcriptPath(home, live.cwd, live.sessionId)])
+export async function inferReport(io: Io, claudeHome: string, live: LiveSession): Promise<Report> {
+  const run = await io.run(['tail', '-c', String(TAIL_BYTES), transcriptPath(claudeHome, live.cwd, live.sessionId)])
   const tail = parseTail(run.exitCode === 0 ? run.stdout : '')
   const cwd = tail.cwd ?? live.cwd
   const isWaiting = live.status === 'idle' && tail.lastText !== null
