@@ -1,9 +1,9 @@
 // The tools the coordinator's model calls when the user talks to it: list the
 // fronts, pass words to one, and merge, rename or dismiss fronts. Registered
 // only in the coordinating session.
-import type { Hook, On } from 'claude-code'
+import type { Hook, On, PromptOrigin } from 'claude-code'
 
-import { currentFronts, frontIdForNumber, hasRefreshed, isCoordinating, refresh } from './coordinator'
+import { currentFronts, frontIdForNumber, hasRefreshed, isCoordinating, panelNumbers, refresh } from './coordinator'
 import { readOverrides, writeOverrides } from './overrides'
 import { TAG } from './format'
 import type { Front, FrontOverrides, FrontSession } from './fronts'
@@ -97,18 +97,38 @@ async function confirmSend($: Engine, name: string, text: string): Promise<{ lin
   }
 }
 
+type Delivery = { sent: true; name: string } | { sent: false; name: string; reason: string }
+
 // `typed`: the user wrote it with /coordinate. `confirmed`: the model drafted
 // it, so it goes only after the user's yes.
+async function deliver($: Engine, frontKey: unknown, text: string, author: Author): Promise<Delivery> {
+  const front = findFront(frontKey)
+  if (typeof front === 'string') return { sent: false, name: String(frontKey), reason: front }
+  const name = quoted(front.name, NAME_MAX)
+  const plan = planRelay(front, text, checksWords(author))
+  if (!plan.ok) return { sent: false, name, reason: plan.reason }
+  const confirmed = author === 'confirmed' ? await confirmSend($, front.name, text) : { line: text }
+  if ('refused' in confirmed) return { sent: false, name, reason: confirmed.refused }
+  const sent = await $.session.send({ to: { sessionId: plan.sessionId }, text: relayMessage(confirmed.line, author) })
+  return sent.isDelivered ? { sent: true, name } : { sent: false, name, reason: `Could not send: ${sent.reason}` }
+}
+
 async function sendToFront($: Engine, frontKey: unknown, text: unknown, author: Author): Promise<string> {
   if (typeof text !== 'string' || text.trim() === '') return 'Missing the text to send.'
-  const front = findFront(frontKey)
-  if (typeof front === 'string') return front
-  const plan = planRelay(front, text, checksWords(author))
-  if (!plan.ok) return plan.reason
-  const confirmed = author === 'confirmed' ? await confirmSend($, front.name, text) : { line: text }
-  if ('refused' in confirmed) return confirmed.refused
-  const sent = await $.session.send({ to: { sessionId: plan.sessionId }, text: relayMessage(confirmed.line, author) })
-  return sent.isDelivered ? `Sent to ${quoted(front.name, NAME_MAX)}.` : `Could not send: ${sent.reason}`
+  const done = await deliver($, frontKey, text, author)
+  return done.sent ? `Sent to ${done.name}.` : done.reason
+}
+
+// One text to several rows, as the user typed it: each row under its own
+// rules, so one waiting on an approval takes nothing while the others do.
+async function sendToMany($: Engine, ids: string[], text: string): Promise<string> {
+  const done: Delivery[] = []
+  for (const id of ids) done.push(await deliver($, id, text, 'typed'))
+  const sent = done.filter(one => one.sent).map(one => one.name)
+  const missed = done.flatMap(one => (one.sent ? [] : [`  ${one.name}: ${one.reason}`]))
+  const lines = [sent.length > 0 ? `Sent to ${sent.length}: ${sent.join(', ')}.` : 'Sent to none.']
+  if (missed.length > 0) lines.push(`Not sent to ${missed.length}:`, ...missed)
+  return lines.join('\n')
 }
 
 async function changeOverrides($: Engine, change: (overrides: FrontOverrides) => string | null): Promise<string> {
@@ -135,22 +155,49 @@ function frontSessionFor(to: string): FrontSession | null {
 }
 
 const COORDINATE_USAGE =
-  'Usage: /coordinate <number> <text>, or /coordinate <number> go to jump to that session, with the row number on the panel.'
+  'Usage: /coordinate <number> <text>, or /coordinate <number> go to jump to that session, with the row number on the panel. ' +
+  'To send one text to several rows: /coordinate 1,3,4 <text>, or /coordinate all <text>.'
+
+// Only the user's own Enter, at the terminal or through Remote Control, sends
+// to several rows: a scheduled prompt or a task's notification never does.
+function isUsersGesture(origin: PromptOrigin): boolean {
+  return origin.kind === 'composer' || origin.kind === 'bridge'
+}
+
+// "1", "1,3,4" or "all": the rows' front ids, or why not. A number nobody has
+// stops the whole send: a typo must not send the words to the rows around it.
+function targetsOf(list: string): string[] | string {
+  const numbers = /^all$/i.test(list) ? panelNumbers() : [...new Set(list.split(',').map(Number))]
+  if (numbers.length === 0) return 'Nothing on the panel to send to.'
+  const ids: string[] = []
+  for (const number of numbers) {
+    const id = frontIdForNumber(number)
+    if (!id) return `No row has number ${number} on the panel: nothing was sent.`
+    ids.push(id)
+  }
+  return ids
+}
 
 // "/coordinate 2 pick B": the text goes to the front shown with number 2, whatever
 // its section, under the same rules as send_to_front, without the model in between.
-async function coordinate($: Engine, args: string): Promise<string> {
+// "/coordinate 1,3 ..." and "/coordinate all ..." send it to each of those rows.
+async function coordinate($: Engine, args: string, origin: PromptOrigin): Promise<string> {
   if (!isCoordinating()) return 'This session does not have the panel open: run /panel first.'
-  const match = /^\s*(\d+)\s+(\S[\s\S]*)$/.exec(args)
+  const match = /^\s*(all|\d+(?:\s*,\s*\d+)*)\s+(\S[\s\S]*)$/i.exec(args)
   if (!match) return COORDINATE_USAGE
-  const id = frontIdForNumber(Number(match[1]))
-  if (!id) return `No row has number ${match[1]} on the panel.`
+  const list = (match[1] ?? '').replace(/\s+/g, '')
   const text = (match[2] ?? '').trim()
-  return /^go$/i.test(text) ? goToFront($, id) : sendToFront($, id, text, 'typed')
+  const many = /^all$/i.test(list) || list.includes(',')
+  if (many && !isUsersGesture(origin)) return 'Sending to several rows takes your own /coordinate, typed at the prompt.'
+  const targets = targetsOf(list)
+  if (typeof targets === 'string') return targets
+  const [only] = targets
+  if (/^go$/i.test(text)) return targets.length === 1 && only ? goToFront($, only) : 'go takes one row number.'
+  return many ? sendToMany($, targets, text) : sendToFront($, only, text, 'typed')
 }
 
 export function registerToolHooks(on: On): void {
-  on('command.run', { command: 'coordinate' }, async ($, e) => ({ text: await coordinate($, e.args) }))
+  on('command.run', { command: 'coordinate' }, async ($, e) => ({ text: await coordinate($, e.args, e.origin) }))
 
   // The approval rule holds for every message this coordinator sends,
   // SendMessage included, not only for send_to_front. It fails closed: before

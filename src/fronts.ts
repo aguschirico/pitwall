@@ -17,7 +17,7 @@ export type FrontOverrides = {
 }
 
 export type FrontSession = { report: Report; live: LiveSession | null; reported: boolean }
-export type Section = 'waiting' | 'running' | 'paused'
+export type Section = 'waiting' | 'running' | 'idle' | 'paused'
 
 export type Front = {
   id: string
@@ -69,9 +69,12 @@ function oldestWait(sessions: FrontSession[]): Waiting | null {
   return waits.sort((a, b) => a.since - b.since)[0] ?? null
 }
 
+// Idle: a session is open, but none is working and none waits on the user.
 function sectionOf(sessions: FrontSession[], waiting: Waiting | null): Section {
   if (waiting !== null) return 'waiting'
-  return sessions.some(one => one.live !== null) ? 'running' : 'paused'
+  const open = sessions.filter(one => one.live !== null)
+  if (open.length === 0) return 'paused'
+  return open.some(one => one.report.state === 'running') ? 'running' : 'idle'
 }
 
 function newestFirst(sessions: FrontSession[]): FrontSession[] {
@@ -114,7 +117,7 @@ function isVisible(front: Front, overrides: FrontOverrides, now: number): boolea
 }
 
 function compareFronts(a: Front, b: Front): number {
-  const order: Section[] = ['waiting', 'running', 'paused']
+  const order: Section[] = ['waiting', 'running', 'idle', 'paused']
   const bySection = order.indexOf(a.section) - order.indexOf(b.section)
   if (bySection !== 0) return bySection
   if (a.section === 'waiting' && a.waiting && b.waiting) return a.waiting.since - b.waiting.since

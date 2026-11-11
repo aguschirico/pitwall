@@ -155,7 +155,7 @@ export async function inferReport(io: Io, claudeHome: string, live: LiveSession)
     branch: tail.branch,
     title: tail.title,
     activity: null,
-    state: isWaiting ? 'waiting' : 'running',
+    state: isWaiting ? 'waiting' : live.status === 'idle' ? 'idle' : 'running',
     waiting: isWaiting ? { ...found, kind: 'review', since: live.updatedAt, classified: false } : null,
     updatedAt: live.updatedAt,
     lastMessage: tail.lastText === null ? null : cutMessage(tail.lastText),

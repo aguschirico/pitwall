@@ -104,9 +104,26 @@ test('a front quiet for more than seven days is gone', async () => {
   expect(build([report('a', { updatedAt: NOW - PAUSE_WINDOW_MS - 1 })], []).length).toBe(0)
 })
 
-test('a live session that finished and only reported back is still in progress', async () => {
+test('a live session that finished its turn and asks nothing is idle', async () => {
   const fronts = build([report('a', { state: 'idle' })], [live('a')])
-  expect(fronts[0]?.section).toBe('running')
+  expect(fronts[0]?.section).toBe('idle')
+})
+
+test('a front with one session working and one idle is running', async () => {
+  const fronts = build([report('a', { state: 'idle' }), report('b', { state: 'running' })], [live('a'), live('b')])
+  expect(fronts.map(front => front.section)).toEqual(['running'])
+})
+
+test('idle sorts after running and before paused', async () => {
+  const fronts = build(
+    [
+      report('p', { state: 'idle', branch: 'feat/p' }),
+      report('i', { state: 'idle', branch: 'feat/i' }),
+      report('r', { state: 'running', branch: 'feat/r' }),
+    ],
+    [live('i'), live('r')],
+  )
+  expect(fronts.map(front => front.section)).toEqual(['running', 'idle', 'paused'])
 })
 
 test('a front marks whether any of its sessions reports for itself', async () => {

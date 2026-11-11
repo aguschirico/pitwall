@@ -820,7 +820,7 @@ test('/coordinate with a number nobody has says so', async ($, on) => {
   await clock.settle()
   const done = await $.command.run(coordinate('9 hola'))
 
-  expect(done.text).toBe('No row has number 9 on the panel.')
+  expect(done.text).toBe('No row has number 9 on the panel: nothing was sent.')
 })
 
 test('every row has a number: a running front takes words too, a paused one has no session', async ($, on) => {
@@ -865,7 +865,8 @@ test('/coordinate without text explains how to use it', async ($, on) => {
   const done = await $.command.run(coordinate('1'))
 
   expect(done.text).toBe(
-    'Usage: /coordinate <number> <text>, or /coordinate <number> go to jump to that session, with the row number on the panel.',
+    'Usage: /coordinate <number> <text>, or /coordinate <number> go to jump to that session, with the row number on the panel. ' +
+      'To send one text to several rows: /coordinate 1,3,4 <text>, or /coordinate all <text>.',
   )
 })
 
@@ -1036,4 +1037,94 @@ test('an approval has no Answer here button', async ($, on) => {
   expect(await ui.find({ type: 'Button', key: 'answer:/repo#search' })).toBe(undefined)
   expect(await ui.find({ type: 'Text', text: /Approval: answer it in/ })).toBeDefined()
   await ui.unmount()
+})
+
+const DEPLOY_NOTICE = 'deploy to prod running, do not push to main until it ends'
+const relayed = (text: string) => `Relayed from the coordinator session, typed by the user: ${JSON.stringify(text)}`
+
+test('/coordinate all sends your words to every row, approval words included', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run(coordinate(`all ${DEPLOY_NOTICE}`))
+
+  expect(seen.asked).toEqual([])
+  expect(seen.sent).toEqual([
+    { to: 'search', text: relayed(DEPLOY_NOTICE) },
+    { to: 'docs', text: relayed(DEPLOY_NOTICE) },
+  ])
+  expect(done.text).toBe('Sent to 2: "search", "docs".\nNot sent to 1:\n  "old": "old" has no open session.')
+})
+
+test('/coordinate 1,2 sends to those rows only', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run(coordinate('2, 1 rerun the tests'))
+
+  expect(seen.sent.map(one => one.to)).toEqual(['docs', 'search'])
+  expect(done.text).toBe('Sent to 2: "docs", "search".')
+})
+
+test('a list with a number nobody has sends nothing', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run(coordinate('1,9 rerun the tests'))
+
+  expect(seen.sent).toEqual([])
+  expect(done.text).toBe('No row has number 9 on the panel: nothing was sent.')
+})
+
+test('a row waiting on an approval takes nothing from /coordinate all, the others do', async ($, on) => {
+  const seen = world()
+  seen.files[`${REPORTS}/search.json`] = serializeReport({ ...SEARCH, waiting: { ...SEARCH.waiting, kind: 'ok-push' } })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run(coordinate(`all ${DEPLOY_NOTICE}`))
+
+  expect(seen.sent.map(one => one.to)).toEqual(['docs'])
+  expect(done.text).toMatch(/^Sent to 1: "docs"\.\nNot sent to 2:\n  "search": /)
+})
+
+test('only your own Enter sends to several rows', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run({ ...coordinate(`all ${DEPLOY_NOTICE}`), origin: { kind: 'task-notification' } })
+
+  expect(seen.sent).toEqual([])
+  expect(done.text).toBe('Sending to several rows takes your own /coordinate, typed at the prompt.')
+})
+
+test('go takes one row number', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run(coordinate('all go'))
+
+  expect(seen.runs.some(argv => argv[0] === 'osascript')).toBe(false)
+  expect(done.text).toBe('go takes one row number.')
+})
+
+test('an open session that asks nothing and does nothing shows under Idle', async ($, on) => {
+  const seen = world()
+  seen.files[`${REPORTS}/docs.json`] = serializeReport({ ...DOCS, state: 'idle' })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^Idle · 1$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^2 ◌ $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Running · 0$/ })).toBeDefined()
+  await ui.unmount()
+
+  const done = await $.command.run(coordinate('2 rerun the tests'))
+  expect(done.text).toBe('Sent to "docs".')
 })

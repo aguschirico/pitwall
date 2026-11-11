@@ -1,4 +1,5 @@
-// The pane beside the coordinator's chat: waiting fronts first. It only draws
+// The pane beside the coordinator's chat: waiting fronts first, then running,
+// idle (open, doing nothing, asking nothing) and paused. It only draws
 // what the coordinator stored in `view`; the open row lives in `selected`, the
 // row whose git fills the lower half in `gitOpen`.
 import { atom, read, update } from 'claude-code'
@@ -15,12 +16,12 @@ type Engine = Parameters<Hook<'ui.render'>>[0]
 export const PANE_ID = 'pitwall'
 export const PANE_TITLE = 'Pitwall'
 
-const EMPTY: PanelView = { waiting: [], running: [], paused: [] }
+const EMPTY: PanelView = { waiting: [], running: [], idle: [], paused: [] }
 const DEFAULT_ROWS = 40
 
 // Change a tag when its value's fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-8' })
+const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-9' })
 const selected = atom({ plugin: 'pitwall', key: 'selected' } as const, null, { shape: 'selected-1' })
 const gitOpen = atom({ plugin: 'pitwall', key: 'gitOpen' } as const, null, { shape: 'git-open-1' })
 
@@ -62,7 +63,7 @@ function bodyRows(e: unknown): number {
 }
 
 function allRows(panel: PanelView): PanelRow[] {
-  return [...panel.waiting, ...panel.running, ...panel.paused]
+  return [...panel.waiting, ...panel.running, ...panel.idle, ...panel.paused]
 }
 
 type Draw = (row: PanelRow, lead: string, leadColor: string | undefined, dim: boolean) => ReturnType<typeof frontRow>
@@ -82,6 +83,8 @@ function sections(els: Elements, part: PanelView, numberOf: (row: PanelRow) => n
       <Text bold color="success">{text}</Text>
     )),
     ...part.running.map(row => draw(row, `${numberOf(row)} ●`, 'success', false)),
+    ...header(part.idle, `Idle · ${part.idle.length}`).map(text => <Text bold>{text}</Text>),
+    ...part.idle.map(row => draw(row, `${numberOf(row)} ◌`, undefined, false)),
     ...header(part.paused, `Paused · ${part.paused.length}`).map(text => (
       <Text bold dimColor>{text}</Text>
     )),

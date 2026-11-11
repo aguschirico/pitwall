@@ -49,6 +49,11 @@ export function frontIdForNumber(number: number): string | undefined {
   return Object.entries(rowNumbers).find(([, one]) => one === number)?.[0]
 }
 
+// Every row's number on the panel, lowest first.
+export function panelNumbers(): number[] {
+  return Object.values(rowNumbers).sort((a, b) => a - b)
+}
+
 // The shared snapshot when another panel wrote it within this panel's own
 // interval, else a fresh one this panel computes and writes for the others.
 // The stale one still lends its PR chips that are recent enough.
@@ -119,7 +124,7 @@ export async function startCoordinator($: Engine): Promise<void> {
   await $.command.register({
     name: 'coordinate',
     description: 'Answers a session that waits on you, by its number on the panel',
-    argumentHint: '<number> <text>',
+    argumentHint: '<number, 1,3,4 or all> <text>',
   })
   if (await read($, coordinator)) await startWatching($)
 }

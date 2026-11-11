@@ -190,16 +190,24 @@ export type RepoPart = { group: PanelGroup; part: PanelView }
 // toView already sorted each section in), or [] for a single one.
 export function repoParts(panel: PanelView): RepoPart[] {
   const groups = new Map<string, PanelGroup>()
-  for (const row of [...panel.waiting, ...panel.running, ...panel.paused]) if (row.group) groups.set(row.group.label, row.group)
+  for (const row of [...panel.waiting, ...panel.running, ...panel.idle, ...panel.paused]) if (row.group) groups.set(row.group.label, row.group)
   const of = (rows: PanelRow[], label: string) => rows.filter(row => row.group?.label === label)
   return [...groups.values()]
     .sort((a, b) => a.label.localeCompare(b.label))
-    .map(group => ({ group, part: { waiting: of(panel.waiting, group.label), running: of(panel.running, group.label), paused: of(panel.paused, group.label) } }))
+    .map(group => ({
+      group,
+      part: {
+        waiting: of(panel.waiting, group.label),
+        running: of(panel.running, group.label),
+        idle: of(panel.idle, group.label),
+        paused: of(panel.paused, group.label),
+      },
+    }))
 }
 
 // Every row in the order the pane draws it.
 export function drawnRows(panel: PanelView): PanelRow[] {
-  const all = (part: PanelView) => [...part.waiting, ...part.running, ...part.paused]
+  const all = (part: PanelView) => [...part.waiting, ...part.running, ...part.idle, ...part.paused]
   const parts = repoParts(panel)
   return parts.length === 0 ? all(panel) : parts.flatMap(one => all(one.part))
 }
@@ -231,7 +239,7 @@ export function assignNumbers(previous: Record<string, number>, rows: PanelRow[]
 
 export function withNumbers(panel: PanelView, numbers: Record<string, number>): PanelView {
   const number = (row: PanelRow): PanelRow => ({ ...row, number: numbers[row.id] ?? 0 })
-  return { waiting: panel.waiting.map(number), running: panel.running.map(number), paused: panel.paused.map(number) }
+  return { waiting: panel.waiting.map(number), running: panel.running.map(number), idle: panel.idle.map(number), paused: panel.paused.map(number) }
 }
 
 export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): PanelView {
@@ -264,6 +272,7 @@ export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): P
   return {
     waiting: byRepo([...of('waiting'), ...rows.filter(waitsOnPr).map(one => one.row)]),
     running: byRepo(of('running')),
+    idle: byRepo(of('idle')),
     paused: byRepo(of('paused')),
   }
 }

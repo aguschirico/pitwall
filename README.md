@@ -23,13 +23,15 @@ api
   Running · 1
   3 ● Docs refresh  now
       Edit: src/content/getting-started.md
+  Idle · 1
+  4 ◌ Release notes  35m ago
   Paused · 1
-  4 ○ feat/onboarding  2d ago
+  5 ○ feat/onboarding  2d ago
       branch feat/onboarding · 2 commits ahead · 5 uncommitted
 
 blog
   Waiting on you · 1
-  5 · Review  Draft on terminal multiplexers  20m ago
+  6 · Review  Draft on terminal multiplexers  20m ago
       → first draft done, wants a read before the edit pass
 ```
 
@@ -38,11 +40,13 @@ blog
 - **Waiting on you** at the top: one line per front with the kind of wait (`Decision`, `OK push`,
   `Manual`, `Review`, `PR`), how long it has waited, and one line on what it needs. Open a row to see
   what the session last said, its last steps, and where to answer.
-- **Running** and **Paused** below: what each front is doing now, plus PR and CI chips when the
-  branch has a PR. Paused fronts stay for seven days, or until their branch is merged or deleted.
+- **Running**, **Idle** and **Paused** below: what each front is doing now, plus PR and CI chips
+  when the branch has a PR. Idle fronts have a session open that finished its turn and asks you
+  nothing. Paused fronts have no session open, and stay for seven days, or until their branch is
+  merged or deleted.
 - **Grouped by repository** when sessions run in more than one: the repos in alphabetical order,
   each in its own color with its own sections, worktrees under their main repo. With a single repo
-  the panel is just the three sections.
+  the panel is just the four sections.
 - **Fronts, not sessions.** Sessions on the same repo and branch are one front, so picking a task up
   again in a new session keeps the same row. Sessions on `main` each get their own.
 - **Git at a glance**: commits over the main line, files changed, what is left uncommitted.
@@ -100,6 +104,8 @@ show. Built and tested on Claude Code 2.1.322 on macOS.
 2. Click a row under **Waiting on you** to see why it waits.
 3. Answer with `/coordinate <number> <text>`, or `/coordinate <number> go` to jump to that session.
    On an open question, **Answer here** writes `/coordinate <number> ` in the prompt for you.
+   To tell several sessions the same thing, `/coordinate 1,3,4 <text>` or `/coordinate all <text>`:
+   each row takes it under its own rules, and the answer lists where it went and where it did not.
    Any row's number works, not only the waiting ones.
 4. Ask the coordinator about the fronts in plain words.
 

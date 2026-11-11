@@ -89,7 +89,9 @@ Three blocks, top to bottom:
    every panel, so a second panel does not repeat it; a panel's first refresh only writes down the
    waits already stuck, since the user is opening the panel to look at them.
 2. **Running**: one line per front with what it is doing now, plus PR and CI chips when they apply.
-3. **Paused**: fronts with no live session, so they are not forgotten.
+3. **Idle**: fronts with a live session that is not working and asks nothing (its turn ended
+   with nothing for the user, or a transcript-only session the registry calls idle).
+4. **Paused**: fronts with no live session, so they are not forgotten.
 
 Kinds of wait:
 
@@ -109,7 +111,7 @@ few steps, the options it offered, and where and how to answer.
 ### Answering and asking
 
 - **Decisions and instructions** ("pick B", "go on", "look into X") are answered with
-  `/coordinate <n> <text>` (`n` is any row's number on the panel, waiting, running or paused),
+  `/coordinate <n> <text>` (`n` is any row's number on the panel, in any section),
   relayed verbatim and marked as typed by the user, or asked for in the
   coordinator's chat. What the coordinator's model drafts is shown in the engine's own question
   dialog (`$.ui.ask`) and goes only on **Send**; it is marked as drafted by the model and confirmed
@@ -117,6 +119,10 @@ few steps, the options it offered, and where and how to answer.
   An open question's **Answer here** button puts `/coordinate <n> ` in the coordinator's prompt
   box (`$.prompt.fill`) and sends nothing; a draft already there that is not a `/coordinate`
   line is left alone, with a toast.
+  `/coordinate 1,3,4 <text>` and `/coordinate all <text>` send one typed text to several rows,
+  each through the same rules as a single row, and answer with where it went and where not. Only
+  the user's own Enter (`composer` or `bridge` origin) sends to several rows, and a number that no
+  row has stops the whole send, so a typo never reaches the rows around it.
   The same yes is asked when the model writes to a front's session with SendMessage directly.
 - **Approvals are never relayed.** The drill-down says which session to go to. A session waiting
   on an approval (OK push, an open permission dialog) takes no message through the panel at all,

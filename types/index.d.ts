@@ -53,7 +53,7 @@ export type PanelRow = {
   canGo: boolean
 }
 
-export type PanelView = { waiting: PanelRow[]; running: PanelRow[]; paused: PanelRow[] }
+export type PanelView = { waiting: PanelRow[]; running: PanelRow[]; idle: PanelRow[]; paused: PanelRow[] }
 
 export type Selected = string | null
 
