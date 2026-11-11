@@ -9,7 +9,13 @@ type Engine = Parameters<Hook<'ui.render'>>[0]
 export type Elements = ReturnType<Engine['ui']['resolve']>
 
 export type RowLook = { lead: string; leadColor: string | undefined; dim: boolean; isOpen: boolean; isGitOpen: boolean }
-export type RowActions = { onToggle: () => void; onToggleGit: () => void; onOpenIde: (path: string) => void; onGo: () => void }
+export type RowActions = {
+  onToggle: () => void
+  onToggleGit: () => void
+  onOpenIde: (path: string) => void
+  onGo: () => void
+  onAnswer: () => void
+}
 
 // The session's last message drawn as the chat draws a reply (bold, lists,
 // code), indented as a block, so a wrapped line keeps its indent.
@@ -31,11 +37,12 @@ function contextRows(els: Elements, row: PanelRow) {
   )
 }
 
-function answerRows(els: Elements, row: PanelRow) {
-  const { Box, Text } = els
+// A question the coordinator can relay gets a button that starts the answer
+// in the coordinator's prompt; an approval only says where to give it.
+function answerRows(els: Elements, row: PanelRow, actions: RowActions) {
+  const { Box, Text, Button } = els
   const drill = row.drill
   if (!drill) return null
-  const answer = drill.canRelay ? `Answer here: "to ${row.title}: …"` : `Approval: answer it in ${drill.where}`
   return (
     <Box flexDirection="column">
       {!row.message && <Text>{`    ${drill.question}`}</Text>}
@@ -43,7 +50,16 @@ function answerRows(els: Elements, row: PanelRow) {
         <Text>{`      ${index + 1}) ${option}`}</Text>
       ))}
       <Text dimColor>{`    ${drill.where}`}</Text>
-      <Text color={drill.canRelay ? 'suggestion' : 'warning'}>{`    ${answer}`}</Text>
+      {drill.canRelay ? (
+        <Box flexDirection="row">
+          <Text>{'    '}</Text>
+          <Button key={`answer:${row.id}`} plain onPress={actions.onAnswer}>
+            <Text color="suggestion">{`✎ Answer here: /coordinate ${row.number} …`}</Text>
+          </Button>
+        </Box>
+      ) : (
+        <Text color="warning">{`    Approval: answer it in ${drill.where}`}</Text>
+      )}
     </Box>
   )
 }
@@ -96,7 +112,7 @@ export function frontRow(els: Elements, row: PanelRow, look: RowLook, actions: R
         </Box>
       )}
       {look.isOpen && contextRows(els, row)}
-      {look.isOpen && answerRows(els, row)}
+      {look.isOpen && answerRows(els, row, actions)}
       {look.isOpen && buttonRow(els, row, look, actions)}
     </Box>
   )

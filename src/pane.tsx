@@ -41,6 +41,18 @@ async function openInEditor($: Engine, path: string): Promise<void> {
   await $.ui.toast("Could not open VS Code: install the `code` command (Shell Command: Install 'code' command in PATH).")
 }
 
+// Starts the answer to row `number` in this session's prompt box. A draft the
+// person was writing stays, unless it is itself a /coordinate line.
+export async function startAnswer($: Engine, number: number): Promise<void> {
+  const draft = (await $.prompt.read()).text.trim()
+  if (draft !== '' && !draft.startsWith('/coordinate')) {
+    await $.ui.toast('The prompt holds a draft: send or clear it, then press Answer here again.')
+    return
+  }
+  const filled = await $.prompt.fill({ text: `/coordinate ${number} `, mode: 'replace' })
+  if (!filled.isFilled) await $.ui.toast(`Could not reach the prompt: type /coordinate ${number} and your answer.`)
+}
+
 // The rows the pane has to draw in, from the Pane's props.
 function bodyRows(e: unknown): number {
   const pick = (value: unknown, key: string): unknown =>
@@ -85,14 +97,15 @@ async function drawPanel($: Engine, els: Elements, rows: number) {
   const gitId = await read($, gitOpen)
   const gitRow = allRows(panel).find(row => row.id === gitId)
   if (allRows(panel).length === 0) return <Text dimColor>Nothing open.</Text>
-  const actions = (id: string): RowActions => ({
+  const actions = (id: string): Omit<RowActions, 'onAnswer'> => ({
     onToggle: () => void update($, selected, current => (current === id ? null : id)),
     onToggleGit: () => void update($, gitOpen, current => (current === id ? null : id)),
     onOpenIde: path => void openInEditor($, path),
     onGo: () => void goToFront($, id).then(text => $.ui.toast(text)),
   })
+  const rowActions = (row: PanelRow): RowActions => ({ ...actions(row.id), onAnswer: () => void startAnswer($, row.number) })
   const draw = (row: PanelRow, lead: string, leadColor: string | undefined, dim: boolean) =>
-    frontRow(els, row, { lead, leadColor, dim, isOpen: open === row.id, isGitOpen: gitRow?.id === row.id }, actions(row.id))
+    frontRow(els, row, { lead, leadColor, dim, isOpen: open === row.id, isGitOpen: gitRow?.id === row.id }, rowActions(row))
   const numberOf = (row: PanelRow) => row.number
   const repos = repoParts(panel)
   const body =

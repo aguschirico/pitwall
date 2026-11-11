@@ -99,6 +99,7 @@ show. Built and tested on Claude Code 2.1.322 on macOS.
 1. In the session you want as the coordinator, run `/panel`.
 2. Click a row under **Waiting on you** to see why it waits.
 3. Answer with `/coordinate <number> <text>`, or `/coordinate <number> go` to jump to that session.
+   On an open question, **Answer here** writes `/coordinate <number> ` in the prompt for you.
    Any row's number works, not only the waiting ones.
 4. Ask the coordinator about the fronts in plain words.
 

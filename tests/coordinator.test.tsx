@@ -69,6 +69,10 @@ type World = {
   configDir?: string
   failPs?: boolean
   noCodeCli?: boolean
+  // What pitwall put in the coordinator's prompt box; `noBox` refuses it.
+  filled?: string[]
+  noBox?: boolean
+  draft?: string
 }
 
 function processAnswer(world: World, argv: readonly string[]): Ran {
@@ -119,6 +123,12 @@ function engine(on: TestOn, world: World): MockClock {
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__pitwall__${e.name}` } }))
+  on('prompt.read', () => ({ value: { text: world.draft ?? '', cursor: 0 } }))
+  on('prompt.fill', (_, e) => {
+    if (world.noBox) return { isFilled: false, cause: 'dialog' as const }
+    world.filled?.push(e.text)
+    return { isFilled: true }
+  })
   on('session.send', (_, e) => {
     world.sent.push({ to: e.to, text: e.text })
     return { isDelivered: true }
@@ -956,4 +966,74 @@ test('with notifications off a stuck wait only shows on the panel', { options: {
   await clock.settle()
   await clock.advance(300_000)
   expect(seen.notes).toEqual([])
+})
+
+test('Answer here starts the answer in the coordinator prompt', async ($, on) => {
+  const seen = { ...world(), filled: [] }
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: '/repo#search' })
+  const button = await ui.find({ type: 'Button', key: 'answer:/repo#search' })
+  expect(button?.text).toMatch(/^✎ Answer here: \/coordinate \d+ …$/)
+  await ui.press({ key: 'answer:/repo#search' })
+  await clock.settle()
+
+  expect(seen.filled).toEqual([`/coordinate ${button?.text.match(/coordinate (\d+)/)?.[1]} `])
+  expect(seen.sent).toEqual([])
+  await ui.unmount()
+})
+
+test('Answer here says what to type when the prompt cannot take it', async ($, on) => {
+  const seen = { ...world(), filled: [], noBox: true }
+  const toasts: string[] = []
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: '/repo#search' })
+  await ui.press({ key: 'answer:/repo#search' })
+  await clock.settle()
+
+  expect(seen.filled).toEqual([])
+  expect(toasts.some(text => /type \/coordinate \d+ and your answer/.test(text))).toBe(true)
+  await ui.unmount()
+})
+
+test('Answer here keeps a draft the user was writing', async ($, on) => {
+  const seen = { ...world(), filled: [], draft: 'half a thought' }
+  const toasts: string[] = []
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: '/repo#search' })
+  await ui.press({ key: 'answer:/repo#search' })
+  await clock.settle()
+
+  expect(seen.filled).toEqual([])
+  expect(toasts.some(text => /holds a draft/.test(text))).toBe(true)
+  await ui.unmount()
+})
+
+test('an approval has no Answer here button', async ($, on) => {
+  const seen = world()
+  seen.files[`${REPORTS}/search.json`] = serializeReport({ ...SEARCH, waiting: { ...SEARCH.waiting, kind: 'ok-push' } })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: '/repo#search' })
+  expect(await ui.find({ type: 'Button', key: 'answer:/repo#search' })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /Approval: answer it in/ })).toBeDefined()
+  await ui.unmount()
 })

@@ -114,6 +114,9 @@ few steps, the options it offered, and where and how to answer.
   coordinator's chat. What the coordinator's model drafts is shown in the engine's own question
   dialog (`$.ui.ask`) and goes only on **Send**; it is marked as drafted by the model and confirmed
   by the user. "Don't send" is the first option, so a dialog that settles by itself lands on no.
+  An open question's **Answer here** button puts `/coordinate <n> ` in the coordinator's prompt
+  box (`$.prompt.fill`) and sends nothing; a draft already there that is not a `/coordinate`
+  line is left alone, with a toast.
   The same yes is asked when the model writes to a front's session with SendMessage directly.
 - **Approvals are never relayed.** The drill-down says which session to go to. A session waiting
   on an approval (OK push, an open permission dialog) takes no message through the panel at all,
