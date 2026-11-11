@@ -77,9 +77,13 @@ blog
 In Claude Code:
 
 ```
-/plugin marketplace add aguschirico/pitwall
-/plugin install pitwall@pitwall
+/plugin marketplace add aguschirico/claude-plugins
+/plugin install pitwall@aguschirico
 ```
+
+It comes from [my marketplace](https://github.com/aguschirico/claude-plugins), next to my other
+plugins. This repository is a marketplace of its own too (`/plugin marketplace add aguschirico/pitwall`,
+then `pitwall@pitwall`), so installs made that way keep working.
 
 Pick the **user** scope so it loads in every session. Sessions that were already open pick it up
 after `/reload-plugins`.
