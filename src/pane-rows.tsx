@@ -1,6 +1,6 @@
 // One front in the pane. Closed: what, when, where it stands, what it waits
-// for. Open: what the session last said, its last steps, how to answer, and
-// the buttons. No state here: the pane passes what is open and the actions.
+// for, and a line with its buttons. Open: what the session last said, its last steps and
+// how to answer. No state here: the pane passes what is open and the actions.
 import type { Hook } from 'claude-code'
 
 import type { PanelRow } from '../types'
@@ -64,28 +64,39 @@ function answerRows(els: Elements, row: PanelRow, actions: RowActions) {
   )
 }
 
+// The row's actions on a line of their own, drawn open or closed, so a front
+// waiting on an approval is one press from its session without opening it.
 function buttonRow(els: Elements, row: PanelRow, look: RowLook, actions: RowActions) {
   const { Box, Text, Button } = els
+  const sep = (show: boolean) => (show ? [<Text dimColor>{'   ·   '}</Text>] : [])
+  const buttons = [
+    ...(row.canGo
+      ? [
+          <Button key={`go:${row.id}`} plain onPress={actions.onGo} label="Go to session">
+            <Text color="suggestion">↪ Go</Text>
+          </Button>,
+        ]
+      : []),
+    ...sep(row.canGo && (row.git !== null || row.openPath !== null)),
+    ...(row.git
+      ? [
+          <Button key={`git:${row.id}`} plain onPress={actions.onToggleGit} label={look.isGitOpen ? 'Hide git' : 'Show git'}>
+            <Text color="suggestion">{look.isGitOpen ? '▾ Git' : '▸ Git'}</Text>
+          </Button>,
+        ]
+      : []),
+    ...sep(row.git !== null && row.openPath !== null),
+    ...(row.openPath
+      ? [
+          <Button key={`open:${row.id}`} plain onPress={() => actions.onOpenIde(row.openPath ?? '')} label="Open in VS Code">
+            <Text color="suggestion">↗ Code</Text>
+          </Button>,
+        ]
+      : []),
+  ]
   return (
-    <Box flexDirection="row">
-      <Text>{'    '}</Text>
-      {row.canGo && (
-        <Button key={`go:${row.id}`} plain onPress={actions.onGo}>
-          <Text color="suggestion">↪ Go to session</Text>
-        </Button>
-      )}
-      {row.canGo && (row.git || row.openPath) && <Text dimColor>{'   ·   '}</Text>}
-      {row.git && (
-        <Button key={`git:${row.id}`} plain onPress={actions.onToggleGit}>
-          <Text color="suggestion">{look.isGitOpen ? '▸ Hide git' : '▸ Show git'}</Text>
-        </Button>
-      )}
-      {row.git && row.openPath && <Text dimColor>{'   ·   '}</Text>}
-      {row.openPath && (
-        <Button key={`open:${row.id}`} plain onPress={() => actions.onOpenIde(row.openPath ?? '')}>
-          <Text color="suggestion">↗ Open in VS Code</Text>
-        </Button>
-      )}
+    <Box flexDirection="row" paddingLeft={4}>
+      {buttons}
     </Box>
   )
 }
@@ -111,9 +122,9 @@ export function frontRow(els: Elements, row: PanelRow, look: RowLook, actions: R
           <Text>{row.detail}</Text>
         </Box>
       )}
+      {(row.canGo || row.git || row.openPath) && buttonRow(els, row, look, actions)}
       {look.isOpen && contextRows(els, row)}
       {look.isOpen && answerRows(els, row, actions)}
-      {look.isOpen && buttonRow(els, row, look, actions)}
     </Box>
   )
 }

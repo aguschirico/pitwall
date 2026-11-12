@@ -50,8 +50,10 @@ blog
 - **Fronts, not sessions.** Sessions on the same repo and branch are one front, so picking a task up
   again in a new session keeps the same row. Sessions on `main` each get their own.
 - **Git at a glance**: commits over the main line, files changed, what is left uncommitted.
-- **Go to session**: brings that session's terminal tab to the front (Ghostty, iTerm2 and
-  Terminal.app by tty; tmux, kitty and WezTerm through their remote control).
+- **Row buttons**, on a line under each row, open or closed: **↪ Go** brings that session's
+  terminal tab to the front (Ghostty, iTerm2 and Terminal.app by tty; tmux, kitty and WezTerm
+  through their remote control), so an OK push is one press away. **▸ Git** opens the branch below,
+  **↗ Code** opens the folder in VS Code.
 - **Answer from the coordinator**: every row has a number, and `/coordinate 1 pick B` sends your
   words, verbatim, to the session in row 1, waiting or running. A front keeps its number while it
   is on the panel, so a row that moves from waiting to running is still the one you read. You can also just ask in the chat: "tell the search one to go with Redis",

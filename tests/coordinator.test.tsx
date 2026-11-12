@@ -732,8 +732,8 @@ test('row titles and actions draw without brackets or hotkeys, git in a frame', 
     expect(button?.props.plain, key).toBe(true)
     expect(button?.props.hotkey, key).toBe(undefined)
   }
-  expect((await ui.find({ type: 'Button', key: 'git:/repo#docs' }))?.text).toBe('▸ Hide git')
-  expect((await ui.find({ type: 'Button', key: 'open:/repo#docs' }))?.text).toBe('↗ Open in VS Code')
+  expect((await ui.find({ type: 'Button', key: 'git:/repo#docs' }))?.text).toBe('▾ Git')
+  expect((await ui.find({ type: 'Button', key: 'open:/repo#docs' }))?.text).toBe('↗ Code')
   expect((await ui.find({ type: 'Box', key: 'git-panel' }))?.props.borderStyle).toBe('round')
   await ui.unmount()
 })
@@ -919,7 +919,7 @@ test('the row button takes you to the session', async ($, on) => {
   await clock.settle()
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: '/repo#search' })
-  expect((await ui.find({ type: 'Button', key: 'go:/repo#search' }))?.text).toBe('↪ Go to session')
+  expect((await ui.find({ type: 'Button', key: 'go:/repo#search' }))?.text).toBe('↪ Go')
   await ui.press({ key: 'go:/repo#search' })
   await clock.settle()
 
@@ -1127,4 +1127,25 @@ test('an open session that asks nothing and does nothing shows under Idle', asyn
 
   const done = await $.command.run(coordinate('2 rerun the tests'))
   expect(done.text).toBe('Sent to "docs".')
+})
+
+test('a row waiting on a push takes you to its session without opening it', async ($, on) => {
+  const seen = world()
+  seen.files[`${REPORTS}/search.json`] = serializeReport({
+    ...SEARCH,
+    waiting: { ...SEARCH.waiting, kind: 'ok-push' },
+    terminal: { program: 'ghostty' },
+  })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Approval: answer it in/ })).toBe(undefined)
+  expect((await ui.find({ type: 'Button', key: 'go:/repo#search' }))?.text).toBe('↪ Go')
+  expect((await ui.find({ type: 'Button', key: 'open:/repo#docs' }))?.text).toBe('↗ Code')
+  await ui.press({ key: 'go:/repo#search' })
+  await clock.settle()
+
+  expect(seen.runs.some(argv => argv[0] === 'osascript')).toBe(true)
+  await ui.unmount()
 })
