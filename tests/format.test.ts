@@ -234,3 +234,10 @@ test('a front keeps its number, and a new one takes the lowest free number', asy
   expect(first).toEqual({ a: 1, b: 2, c: 3 })
   expect(assignNumbers(first, rows(['d', 'c', 'a']))).toEqual({ a: 1, c: 3, d: 2 })
 })
+
+test('a session on main with commits not pushed says so instead of no changes', async () => {
+  const shared = { base: null, ahead: 0, behind: 0, dirty: 0, files: [], unpushed: 4 }
+  expect(summaryLine(null, shared, true)).toBe('4 commits not pushed')
+  expect(summaryLine(null, { ...shared, unpushed: 1, dirty: 2 }, true)).toBe('1 commit not pushed · 2 uncommitted')
+  expect(summaryLine(null, { ...shared, unpushed: 0 }, true)).toBe('no changes')
+})

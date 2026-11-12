@@ -24,6 +24,8 @@ export type PanelGit = {
   removed: number
   commits: PanelCommit[]
   dirtyFiles: string[]
+  // On a shared branch: commits its upstream does not have yet.
+  unpushed: number
 }
 
 // The repository a row belongs to, when the panel shows more than one: its

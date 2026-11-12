@@ -50,7 +50,8 @@ blog
   the panel is just the four sections.
 - **Fronts, not sessions.** Sessions on the same repo and branch are one front, so picking a task up
   again in a new session keeps the same row. Sessions on `main` each get their own.
-- **Git at a glance**: commits over the main line, files changed, what is left uncommitted.
+- **Git at a glance**: commits over the main line, files changed, what is left uncommitted. A
+  session working on `main` itself shows the commits it has not pushed yet.
 - **Row buttons**, on a line under each row, open or closed: **↪ Go** brings that session's
   terminal tab to the front (Ghostty, iTerm2 and Terminal.app by tty; tmux, kitty and WezTerm
   through their remote control), so an OK push is one press away. **▸ Git** opens the branch below,

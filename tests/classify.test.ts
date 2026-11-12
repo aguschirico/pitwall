@@ -165,3 +165,10 @@ test('a long fallback is cut at the last whole word', async () => {
   expect(why.length).toBeLessThanOrEqual(120)
   expect(why.endsWith(' word…')).toBe(true)
 })
+
+test('the prompt counts an offer of a next step as a decision, and a held push as an OK push', async () => {
+  const prompt = buildClassifyPrompt('hola')
+  expect(prompt.includes('offers a next step and waits for the user')).toBe(true)
+  expect(prompt.includes('stays held until the user OKs')).toBe(true)
+  expect(prompt.includes('Waiting on someone else')).toBe(true)
+})

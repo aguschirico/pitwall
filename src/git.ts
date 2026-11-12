@@ -16,6 +16,8 @@ export type GitInfo = {
   // Optional: a snapshot an older panel wrote has neither.
   commits?: Commit[]
   dirtyFiles?: string[]
+  // On a shared branch (main): commits on it that its upstream does not have.
+  unpushed?: number
 }
 
 const COMMITS_SHOWN = 20
@@ -86,6 +88,20 @@ async function branchChanges(io: Io, cwd: string): Promise<Pick<GitInfo, 'base' 
   }
 }
 
+// A session on the shared main line can still hold commits nobody else has:
+// the ones on top of its upstream. None when it has no upstream.
+async function unpushedChanges(io: Io, cwd: string): Promise<Pick<GitInfo, 'unpushed' | 'commits'>> {
+  const [count, log] = await Promise.all([
+    io.run(['git', 'rev-list', '--count', '@{upstream}..HEAD'], { cwd }),
+    io.run(['git', 'log', '--format=%h%x09%s', '-n', String(COMMITS_SHOWN), '@{upstream}..HEAD'], { cwd }),
+  ])
+  const unpushed = count.exitCode === 0 ? Number.parseInt(count.stdout.trim(), 10) : 0
+  return {
+    unpushed: Number.isFinite(unpushed) ? unpushed : 0,
+    commits: log.exitCode === 0 ? parseCommits(log.stdout) : [],
+  }
+}
+
 // `ownBranch` is false for a session on the shared main line: only its
 // uncommitted files mean anything there.
 export async function fetchGit(io: Io, cwd: string, ownBranch: boolean): Promise<GitInfo | null> {
@@ -94,7 +110,7 @@ export async function fetchGit(io: Io, cwd: string, ownBranch: boolean): Promise
     if (status.exitCode !== 0) return null
     const dirty = countDirty(status.stdout)
     const dirtyFiles = dirtyPaths(status.stdout).slice(0, DIRTY_SHOWN)
-    if (!ownBranch) return { base: null, ahead: 0, behind: 0, dirty, files: [], commits: [], dirtyFiles }
+    if (!ownBranch) return { base: null, ahead: 0, behind: 0, dirty, files: [], dirtyFiles, ...(await unpushedChanges(io, cwd)) }
     return { ...(await branchChanges(io, cwd)), dirty, dirtyFiles }
   } catch {
     return null

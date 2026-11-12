@@ -61,9 +61,10 @@ test('a worktree on its own branch reports ahead, behind, files and dirty agains
   expect(fake.calls.every(call => call.at(-1) === '@/repo/search')).toBe(true)
 })
 
-test('a session on the shared branch reports only its dirty files', async () => {
-  const info = await fetchGit(io(ANSWERS), '/repo', false)
-  expect(info).toEqual({ base: null, ahead: 0, behind: 0, dirty: 1, files: [], commits: [], dirtyFiles: ['a.ts'] })
+test('a session on the shared branch with nothing over its upstream reports only its dirty files', async () => {
+  const fake = io(argv => (argv.includes('@{upstream}..HEAD') ? ok(argv.includes('rev-list') ? '0\n' : '') : ANSWERS(argv)))
+  const info = await fetchGit(fake, '/repo', false)
+  expect(info).toEqual({ base: null, ahead: 0, behind: 0, dirty: 1, files: [], commits: [], dirtyFiles: ['a.ts'], unpushed: 0 })
 })
 
 test('a repo with no origin compares against its local main', async () => {
@@ -84,4 +85,31 @@ test('log lines become commits', async () => {
 
 test('porcelain lines become paths, renames by their new name', async () => {
   expect(dirtyPaths(' M a.ts\n?? new dir/b.ts\nR  old.ts -> c.ts\n')).toEqual(['a.ts', 'new dir/b.ts', 'c.ts'])
+})
+
+test('a session on the shared main line counts the commits its upstream does not have', async () => {
+  const fake = io(argv => {
+    if (argv.includes('status')) return ok('')
+    if (argv.includes('rev-list') && argv.includes('@{upstream}..HEAD')) return ok('4\n')
+    if (argv.includes('log') && argv.includes('@{upstream}..HEAD')) return ok('34f68cd\tfeat: send invoices\n')
+    return fail
+  })
+  const info = await fetchGit(fake, '/repo', false)
+  expect(info).toEqual({
+    base: null,
+    ahead: 0,
+    behind: 0,
+    dirty: 0,
+    files: [],
+    dirtyFiles: [],
+    unpushed: 4,
+    commits: [{ hash: '34f68cd', subject: 'feat: send invoices' }],
+  })
+})
+
+test('a shared branch with no upstream has nothing unpushed', async () => {
+  const fake = io(argv => (argv.includes('status') ? ok('') : fail))
+  const info = await fetchGit(fake, '/repo', false)
+  expect(info?.unpushed).toBe(0)
+  expect(info?.commits).toEqual([])
 })

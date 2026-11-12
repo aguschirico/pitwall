@@ -21,6 +21,7 @@ export function gitSection(els: Elements, row: PanelRow, onClose: () => void) {
       {row.summary !== '' && <Text>{row.summary}</Text>}
       {git.base !== null && <Text dimColor>{`Commits on top of ${base}:`}</Text>}
       {git.base !== null && git.commits.length === 0 && <Text dimColor>{'  none'}</Text>}
+      {git.base === null && git.unpushed > 0 && <Text dimColor>{'Not pushed yet:'}</Text>}
       {git.commits.map(commit => (
         <Text>{`  ${commit.hash} ${commit.subject}`}</Text>
       ))}

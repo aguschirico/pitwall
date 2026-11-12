@@ -26,11 +26,13 @@ const TIMEOUT_MS = 20_000
 const INSTRUCTIONS = `Classify the last message a coding assistant sent to its user. Reply with JSON only:
 {"kind": "...", "why": "...", "question": "...", "options": ["..."], "recap": "...", "topic": "..."}
 kind is one of:
-- "decision": it asks the user to choose between options or to answer something before it can go on
-- "ok-push": it asks permission to commit, push, open or merge a PR, or deploy
+- "decision": it asks the user to choose between options or to answer something before it can go on, or it offers a next step and waits for the user's go ("I can start X meanwhile", "want me to...?"), even when the offer is not phrased as a question
+- "ok-push": it asks permission to commit, push, open or merge a PR, or deploy, or says work stays held until the user OKs one of those ("the commits stay local until you OK the push"), and offers nothing else
 - "manual": it asks for something only the user can do (log in, run SQL in production, act outside this machine)
 - "review": it left something ready for the user to look at
-- "none": it finished and only reports back, nothing to answer
+- "none": it finished and only reports back: no question, no offer of a next step, nothing held for the user's OK
+A message that offers a next step and also holds a push for the user's OK is "decision": the offer can be answered from elsewhere, the push OK is given in the session.
+Waiting on someone else (a reviewer, a teammate's answer) is not by itself a wait on the user.
 why: at most 80 characters, in the message's language, what the user must do.
 question: the question as the message asks it ("" for none).
 options: the literal options it offers, or [].

@@ -63,7 +63,11 @@ function plural(count: number, word: string): string {
 
 function gitWords(git: GitInfo): string[] {
   const dirty = git.dirty > 0 ? [`${git.dirty} uncommitted`] : []
-  if (git.base === null) return dirty.length > 0 ? dirty : ['no changes']
+  if (git.base === null) {
+    const unpushed = (git.unpushed ?? 0) > 0 ? [`${plural(git.unpushed ?? 0, 'commit')} not pushed`] : []
+    const parts = [...unpushed, ...dirty]
+    return parts.length > 0 ? parts : ['no changes']
+  }
   const own = git.ahead > 0 ? `${plural(git.ahead, 'commit')} ahead` : 'no commits ahead'
   const base = git.base.replace(/^origin\//, '')
   const rebase = git.behind > BEHIND_WARN ? ' (rebase soon)' : ''
@@ -120,6 +124,7 @@ export function gitView(info: GitInfo | null): PanelGit | null {
     removed: sum('removed'),
     commits: info.commits ?? [],
     dirtyFiles: info.dirtyFiles ?? [],
+    unpushed: info.unpushed ?? 0,
   }
 }
 
