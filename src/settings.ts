@@ -30,6 +30,29 @@ export function stuckMsFrom(options: PluginOptions): number | null {
 
 let stuckAfter: number | null = DEFAULT_STUCK_MIN * 60_000
 
+// How long a front with no open session stays on the panel: 1 to 7 days,
+// 1 by default. Its reports are kept the 7 days whatever the choice.
+export const DEFAULT_CLOSED_DAYS = 1
+export const MAX_CLOSED_DAYS = 7
+const DAY = 24 * 60 * 60 * 1000
+
+export function closedMsFrom(options: PluginOptions): number {
+  const raw = options.closedDays
+  const days = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : Number.NaN
+  if (!Number.isFinite(days)) return DEFAULT_CLOSED_DAYS * DAY
+  return Math.round(Math.min(MAX_CLOSED_DAYS, Math.max(DEFAULT_CLOSED_DAYS, days)) * DAY)
+}
+
+let closedWindow = DEFAULT_CLOSED_DAYS * DAY
+
+export function setClosedWindowMs(ms: number): void {
+  closedWindow = ms
+}
+
+export function closedWindowMs(): number {
+  return closedWindow
+}
+
 export function setStuckAfterMs(ms: number | null): void {
   stuckAfter = ms
 }

@@ -91,7 +91,7 @@ Three blocks, top to bottom:
 2. **Running**: one line per front with what it is doing now, plus PR and CI chips when they apply.
 3. **Idle**: fronts with a live session that is not working and asks nothing (its turn ended
    with nothing for the user, or a transcript-only session the registry calls idle).
-4. **Paused**: fronts with no live session, so they are not forgotten.
+4. **Closed**: fronts with no live session, so they are not forgotten.
 
 Kinds of wait:
 
@@ -156,10 +156,15 @@ few steps, the options it offered, and where and how to answer.
 - The model runs only when a turn ends. The "running" line comes from cheap data: title, last tool,
   last prompt.
 
-### Paused
+### Closed
 
-- Fronts with activity in the last 7 days, even without a live session.
-- They go away when the branch is merged or deleted, when I dismiss them, or when the window passes.
+- Fronts with no live session and activity within the window: 1 day by default, `closedDays` up
+  to 7. Reports are kept 7 days whatever the window, so raising it brings fronts back.
+- They go away when the branch is merged or deleted, when I press **✕ Close** on the row (or ask
+  the coordinator to dismiss one), or when the window passes. A closed front comes back with any
+  new activity: a resumed session is live again, so it shows under Running or Idle.
+- A title that is only the prompt box's `<pasted_content>` wrapper is skipped: the row is named by
+  the words around the paste, Claude's title, the branch or the session's name.
 
 ### Sharing the work between panels
 

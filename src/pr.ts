@@ -1,5 +1,5 @@
 // What GitHub and git say about a front's branch: the PR chip for the panel,
-// and whether a paused front's work is over (merged or branch deleted).
+// and whether a closed front's work is over (merged or branch deleted).
 import type { Io } from './registry'
 
 export type PrChip = {

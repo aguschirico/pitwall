@@ -3,6 +3,7 @@
 // best effort.
 import type { Hook, On } from 'claude-code'
 
+import { PASTE_BLOCK } from './fronts'
 import { classifyTurn, fallbackClassification, type Classification } from './classify'
 import { isCoordinating } from './coordinator'
 import { mayRename, renameSession } from './naming'
@@ -64,6 +65,7 @@ function pickField(input: unknown): string | null {
 // commands are no title.
 function firstLine(text: string): string | null {
   const line = text
+    .replace(PASTE_BLOCK, '\n')
     .split('\n')
     .map(one => one.replace(/\[Image #\d+\]/g, '').trim())
     .find(one => one !== '' && !one.startsWith('/'))

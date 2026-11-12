@@ -3,7 +3,10 @@
 import type { LiveSession } from './registry'
 import type { Report, Waiting } from './report'
 
-export const PAUSE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+// How long a closed front can stay on the panel at most, and how long its
+// reports are kept: the user picks 1 to 7 days, 1 by default.
+export const DAY_MS = 24 * 60 * 60 * 1000
+export const CLOSED_KEEP_MS = 7 * DAY_MS
 
 // On these branches each session is its own front: unrelated work shares them.
 // A detached HEAD names no branch at all.
@@ -17,7 +20,7 @@ export type FrontOverrides = {
 }
 
 export type FrontSession = { report: Report; live: LiveSession | null; reported: boolean }
-export type Section = 'waiting' | 'running' | 'idle' | 'paused'
+export type Section = 'waiting' | 'running' | 'idle' | 'closed'
 
 export type Front = {
   id: string
@@ -38,8 +41,12 @@ export function frontId(report: Report): string {
 }
 
 // A title saved before markers were stripped: "[Image #3]" or "/panel" names nothing.
+// The wrapper the prompt box puts around a paste: a title of its own words
+// leaves it out, so a session that opened with a paste is not named by its tag.
+export const PASTE_BLOCK = /<pasted_content\b[^>]*>[\s\S]*?(<\/pasted_content>|$)/g
+
 function cleanTitle(title: string | null): string | null {
-  const clean = title?.replace(/\[Image #\d+\]/g, '').trim() ?? ''
+  const clean = title?.replace(PASTE_BLOCK, '').replace(/\[Image #\d+\]/g, '').trim() ?? ''
   return clean === '' || clean.startsWith('/') ? null : clean
 }
 
@@ -73,7 +80,7 @@ function oldestWait(sessions: FrontSession[]): Waiting | null {
 function sectionOf(sessions: FrontSession[], waiting: Waiting | null): Section {
   if (waiting !== null) return 'waiting'
   const open = sessions.filter(one => one.live !== null)
-  if (open.length === 0) return 'paused'
+  if (open.length === 0) return 'closed'
   return open.some(one => one.report.state === 'running') ? 'running' : 'idle'
 }
 
@@ -108,16 +115,18 @@ function isGhost(front: Front): boolean {
   )
 }
 
-function isVisible(front: Front, overrides: FrontOverrides, now: number): boolean {
-  if (front.section !== 'paused') return true
+// A closed front shows for `closedWindowMs` after its last activity, unless the
+// user closed it on the panel; any later activity brings it back.
+function isVisible(front: Front, overrides: FrontOverrides, now: number, closedWindowMs: number): boolean {
+  if (front.section !== 'closed') return true
   if (isGhost(front)) return false
-  if (now - front.lastActivity > PAUSE_WINDOW_MS) return false
+  if (now - front.lastActivity > closedWindowMs) return false
   const dismissedAt = overrides.dismissed[front.id]
   return dismissedAt === undefined || front.lastActivity > dismissedAt
 }
 
 function compareFronts(a: Front, b: Front): number {
-  const order: Section[] = ['waiting', 'running', 'idle', 'paused']
+  const order: Section[] = ['waiting', 'running', 'idle', 'closed']
   const bySection = order.indexOf(a.section) - order.indexOf(b.section)
   if (bySection !== 0) return bySection
   if (a.section === 'waiting' && a.waiting && b.waiting) return a.waiting.since - b.waiting.since
@@ -132,6 +141,7 @@ export function buildFronts(input: {
   live: LiveSession[]
   overrides: FrontOverrides
   now: number
+  closedWindowMs?: number
 }): Front[] {
   const liveById = new Map(input.live.map(one => [one.sessionId, one]))
   const groups = new Map<string, FrontSession[]>()
@@ -144,6 +154,6 @@ export function buildFronts(input: {
   input.inferred.forEach(report => add(report, false))
   return [...groups.entries()]
     .map(([id, sessions]) => toFront(id, sessions, input.overrides.names))
-    .filter(front => isVisible(front, input.overrides, input.now))
+    .filter(front => isVisible(front, input.overrides, input.now, input.closedWindowMs ?? CLOSED_KEEP_MS))
     .sort(compareFronts)
 }

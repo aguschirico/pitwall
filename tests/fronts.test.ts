@@ -1,10 +1,10 @@
 import { expect, test } from 'claude-code/testing'
 
-import { buildFronts, frontId, PAUSE_WINDOW_MS, type FrontOverrides } from '../src/fronts'
+import { buildFronts, DAY_MS, frontId, CLOSED_KEEP_MS, type FrontOverrides } from '../src/fronts'
 import type { LiveSession } from '../src/registry'
 import type { Report, Waiting } from '../src/report'
 
-const NOW = 10 * PAUSE_WINDOW_MS
+const NOW = 10 * CLOSED_KEEP_MS
 const NONE: FrontOverrides = { aliases: {}, names: {}, dismissed: {} }
 
 function report(id: string, patch: Partial<Report> = {}): Report {
@@ -46,9 +46,9 @@ test('a session on the default branch is a front of its own', async () => {
   expect(frontId(report('a', { branch: 'main' }))).toBe('/repo#session:a')
 })
 
-test('a waiting report with no live session is paused, not waiting', async () => {
+test('a waiting report with no live session is closed, not waiting', async () => {
   const fronts = build([report('a', { state: 'waiting', waiting: wait(NOW - 5_000) })], [])
-  expect(fronts.map(front => front.section)).toEqual(['paused'])
+  expect(fronts.map(front => front.section)).toEqual(['closed'])
 })
 
 test('two live sessions on one branch, one waiting, make one waiting front', async () => {
@@ -94,14 +94,32 @@ test('a renamed front shows its new name', async () => {
   expect(fronts[0]?.name).toBe('Search cache')
 })
 
-test('a dismissed paused front stays hidden until it moves again', async () => {
+test('a closed front the user closed stays hidden until it moves again', async () => {
   const dismissed = { ...NONE, dismissed: { '/repo#feat/x': NOW - 500 } }
   expect(build([report('a')], [], dismissed).length).toBe(0)
   expect(build([report('a', { updatedAt: NOW - 100 })], [], dismissed).length).toBe(1)
 })
 
 test('a front quiet for more than seven days is gone', async () => {
-  expect(build([report('a', { updatedAt: NOW - PAUSE_WINDOW_MS - 1 })], []).length).toBe(0)
+  expect(build([report('a', { updatedAt: NOW - CLOSED_KEEP_MS - 1 })], []).length).toBe(0)
+})
+
+test('a closed front shows for the window the user picked', async () => {
+  const twoDays = [report('a', { updatedAt: NOW - 2 * DAY_MS })]
+  const at = (days: number) => buildFronts({ reports: twoDays, inferred: [], live: [], overrides: NONE, now: NOW, closedWindowMs: days * DAY_MS })
+  expect(at(1).length).toBe(0)
+  expect(at(3).length).toBe(1)
+})
+
+test('a front the user closed comes back when its session is resumed', async () => {
+  const closed = { ...NONE, dismissed: { '/repo#feat/x': NOW - 500 } }
+  const fronts = build([report('a', { updatedAt: NOW - 1_000, state: 'idle' })], [live('a')], closed)
+  expect(fronts.map(front => front.section)).toEqual(['idle'])
+})
+
+test('a session that opened with a paste is not named by the paste tag', async () => {
+  const fronts = build([report('a', { branch: 'main', title: '<pasted_content id="ad6e">' })], [live('a')])
+  expect(fronts[0]?.name).toBe('name-a')
 })
 
 test('a live session that finished its turn and asks nothing is idle', async () => {
@@ -114,7 +132,7 @@ test('a front with one session working and one idle is running', async () => {
   expect(fronts.map(front => front.section)).toEqual(['running'])
 })
 
-test('idle sorts after running and before paused', async () => {
+test('idle sorts after running and before closed', async () => {
   const fronts = build(
     [
       report('p', { state: 'idle', branch: 'feat/p' }),
@@ -123,7 +141,7 @@ test('idle sorts after running and before paused', async () => {
     ],
     [live('i'), live('r')],
   )
-  expect(fronts.map(front => front.section)).toEqual(['running', 'idle', 'paused'])
+  expect(fronts.map(front => front.section)).toEqual(['running', 'idle', 'closed'])
 })
 
 test('a front marks whether any of its sessions reports for itself', async () => {

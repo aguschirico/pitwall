@@ -25,7 +25,7 @@ api
       Edit: src/content/getting-started.md
   Idle · 1
   4 ◌ Release notes  35m ago
-  Paused · 1
+  Closed · 1
   5 ○ feat/onboarding  2d ago
       branch feat/onboarding · 2 commits ahead · 5 uncommitted
 
@@ -40,10 +40,11 @@ blog
 - **Waiting on you** at the top: one line per front with the kind of wait (`Decision`, `OK push`,
   `Manual`, `Review`, `PR`), how long it has waited, and one line on what it needs. Open a row to see
   what the session last said, its last steps, and where to answer.
-- **Running**, **Idle** and **Paused** below: what each front is doing now, plus PR and CI chips
+- **Running**, **Idle** and **Closed** below: what each front is doing now, plus PR and CI chips
   when the branch has a PR. Idle fronts have a session open that finished its turn and asks you
-  nothing. Paused fronts have no session open, and stay for seven days, or until their branch is
-  merged or deleted.
+  nothing. Closed fronts have no session open: they stay a day (see Options), until their branch is
+  merged or deleted, or until you press **✕ Close** on the row. Resuming one of its sessions brings
+  it back.
 - **Grouped by repository** when sessions run in more than one: the repos in alphabetical order,
   each in its own color with its own sections, worktrees under their main repo. With a single repo
   the panel is just the four sections.
@@ -143,6 +144,9 @@ show. Built and tested on Claude Code 2.1.322 on macOS.
   stuck when you opened the panel are not notified: you are looking at them. With two panels open,
   only one notifies. On by default; turn it off with
   `echo '{"stuckNotify":false}' | claude plugin configure pitwall@aguschirico --values-stdin`.
+- **Keep closed fronts (days)**: how long a front with no open session stays under Closed, 1 to 7
+  days, 1 by default. `✕ Close` hides one sooner, and any new activity in it brings it back:
+  `echo '{"closedDays":"3"}' | claude plugin configure pitwall@aguschirico --values-stdin`.
 
 ## How it works
 

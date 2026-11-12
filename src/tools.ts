@@ -43,7 +43,7 @@ const SPECS = [
   },
   {
     name: 'dismiss_front',
-    description: 'Hides a paused front until it shows new activity.',
+    description: 'Hides a closed front (no open session) until it shows new activity.',
     inputSchema: { type: 'object', properties: { frontId: FRONT_ID }, required: ['frontId'] },
   },
 ] as const

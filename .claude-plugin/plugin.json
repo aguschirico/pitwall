@@ -1,6 +1,6 @@
 {
   "name": "pitwall",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "A pit wall for your Claude Code sessions: every session on this machine, which ones wait on you, and why",
   "author": {
     "name": "Augusto Chirico",
@@ -46,6 +46,12 @@
       "title": "Notify when stuck",
       "description": "Also raise a native notification, once per wait, when a session turns stuck. On by default.",
       "default": true
+    },
+    "closedDays": {
+      "type": "number",
+      "title": "Keep closed fronts (days)",
+      "description": "How long a front with no open session stays under Closed: 1 to 7 days, 1 by default. ✕ Close hides one sooner; resuming it brings it back.",
+      "default": 1
     }
   }
 }

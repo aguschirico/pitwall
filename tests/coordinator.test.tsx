@@ -183,7 +183,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     expect((await ui.find({ type: 'Text', text: /Waiting on you · 1/ }))?.text).toBe('Waiting on you · 1')
     expect(await ui.find({ type: 'Text', text: /Running · 1/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Paused · 1/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Closed · 1/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /#117/ })).toBeDefined()
     await ui.unmount()
   })
@@ -281,7 +281,7 @@ test('running /panel twice keeps one refresh per period', async ($, on) => {
   expect(seen.lists.count - before).toBe(1)
 })
 
-test('a paused front whose pr merged leaves the panel', async ($, on) => {
+test('a closed front whose pr merged leaves the panel', async ($, on) => {
   const seen = world()
   seen.gh.old = JSON.stringify({ number: 9, state: 'MERGED', reviewDecision: null, statusCheckRollup: [] })
   const clock = engine(on, seen)
@@ -289,7 +289,7 @@ test('a paused front whose pr merged leaves the panel', async ($, on) => {
   await clock.settle()
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
-  expect(await ui.find({ type: 'Text', text: /Paused · 0/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Closed · 0/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -520,7 +520,7 @@ test('a rename made during a slow refresh survives it', async ($, on) => {
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
   expect(await ui.find({ type: 'Button', text: /Docs refresh/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Paused · 0/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Closed · 0/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -823,7 +823,7 @@ test('/coordinate with a number nobody has says so', async ($, on) => {
   expect(done.text).toBe('No row has number 9 on the panel: nothing was sent.')
 })
 
-test('every row has a number: a running front takes words too, a paused one has no session', async ($, on) => {
+test('every row has a number: a running front takes words too, a closed one has no session', async ($, on) => {
   const seen = world()
   const clock = engine(on, seen)
   await openPanel($)
@@ -1147,5 +1147,45 @@ test('a row waiting on a push takes you to its session without opening it', asyn
   await clock.settle()
 
   expect(seen.runs.some(argv => argv[0] === 'osascript')).toBe(true)
+  await ui.unmount()
+})
+
+test('Close takes a closed front off the panel, and it stays off', async ($, on) => {
+  const seen = world()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^Closed · 1$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'close:/repo#search' })).toBe(undefined)
+  expect((await ui.find({ type: 'Button', key: 'close:/repo#old' }))?.text).toBe('✕ Close')
+  await ui.press({ key: 'close:/repo#old' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^Closed · 0$/ })).toBeDefined()
+
+  await clock.advance(REFRESH_MS + 1_000)
+  expect(await ui.find({ type: 'Text', text: /^Closed · 0$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a closed front older than a day is off the panel by default', async ($, on) => {
+  const seen = world()
+  seen.files[`${REPORTS}/old.json`] = serializeReport({ ...OLD, updatedAt: NOW - 2 * 86_400_000 })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^Closed · 0$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('with closedDays at 3 a closed front of two days still shows', { options: { closedDays: 3 } }, async ($, on) => {
+  const seen = world()
+  seen.files[`${REPORTS}/old.json`] = serializeReport({ ...OLD, updatedAt: NOW - 2 * 86_400_000 })
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^Closed · 1$/ })).toBeDefined()
   await ui.unmount()
 })

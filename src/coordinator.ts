@@ -13,7 +13,7 @@ import { claudeHomeOf } from './paths'
 import { ioFrom, type Io } from './registry'
 import { computeSnapshot, readSnapshot, type Snapshot } from './snapshot'
 import { nudgeStuck } from './nudge'
-import { DEFAULT_REFRESH_S, notifiesStuck, stuckAfterMs } from './settings'
+import { closedWindowMs, DEFAULT_REFRESH_S, notifiesStuck, stuckAfterMs } from './settings'
 import { registerTools } from './tools'
 
 type Engine = Parameters<Hook<'session.start'>>[0]
@@ -76,6 +76,7 @@ async function refreshOnce($: Engine): Promise<void> {
     live: others(snapshot.live),
     overrides: await readOverrides($),
     now,
+    closedWindowMs: closedWindowMs(),
   })
   const view = toView(lastFronts, now, { pr: snapshot.pr, git: snapshot.git, stuckAfter: stuckAfterMs() })
   rowNumbers = assignNumbers(rowNumbers, drawnRows(view))

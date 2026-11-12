@@ -15,6 +15,7 @@ export type RowActions = {
   onOpenIde: (path: string) => void
   onGo: () => void
   onAnswer: () => void
+  onClose: () => void
 }
 
 // The session's last message drawn as the chat draws a reply (bold, lists,
@@ -93,6 +94,14 @@ function buttonRow(els: Elements, row: PanelRow, look: RowLook, actions: RowActi
           </Button>,
         ]
       : []),
+    ...sep(row.canClose && (row.canGo || row.git !== null || row.openPath !== null)),
+    ...(row.canClose
+      ? [
+          <Button key={`close:${row.id}`} plain onPress={actions.onClose} label="Close: hide it until it moves again">
+            <Text color="suggestion">✕ Close</Text>
+          </Button>,
+        ]
+      : []),
   ]
   return (
     <Box flexDirection="row" paddingLeft={4}>
@@ -122,7 +131,7 @@ export function frontRow(els: Elements, row: PanelRow, look: RowLook, actions: R
           <Text>{row.detail}</Text>
         </Box>
       )}
-      {(row.canGo || row.git || row.openPath) && buttonRow(els, row, look, actions)}
+      {(row.canGo || row.git || row.openPath || row.canClose) && buttonRow(els, row, look, actions)}
       {look.isOpen && contextRows(els, row)}
       {look.isOpen && answerRows(els, row, actions)}
     </Box>

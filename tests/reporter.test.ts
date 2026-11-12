@@ -321,3 +321,19 @@ test('a command the engine draws as executing is not waiting, however long it ru
   await clock.advance(60_000)
   await call
 })
+
+test('the title skips a pasted block and takes the words around it', async ($, on) => {
+  const seen = engine(on)
+  await $.session.start(START)
+  await $.turn.start({ text: '<pasted_content id="ad6e">\nERROR deadlock on orders\n</pasted_content>\nmirá este log', turnId: 't1' })
+
+  expect(seen.last()?.title).toBe('mirá este log')
+})
+
+test('a prompt that is only a paste leaves the title for later', async ($, on) => {
+  const seen = engine(on)
+  await $.session.start(START)
+  await $.turn.start({ text: '<pasted_content id="ad6e">\nERROR deadlock on orders\n</pasted_content>', turnId: 't1' })
+
+  expect(seen.last()?.title).toBe(null)
+})

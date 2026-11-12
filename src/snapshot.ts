@@ -7,7 +7,7 @@
 // when each was fetched, and a newer snapshot carries the chip over.
 import type { Hook } from 'claude-code'
 
-import { buildFronts, PAUSE_WINDOW_MS, type Front } from './fronts'
+import { buildFronts, CLOSED_KEEP_MS, type Front } from './fronts'
 import { fetchGit, type GitInfo } from './git'
 import { dismissFronts, readOverrides } from './overrides'
 import { branchGone, fetchPr, type PrChip } from './pr'
@@ -80,11 +80,11 @@ export async function readSnapshot(io: Io, claudeHome: string): Promise<Snapshot
   }
 }
 
-// Reports of sessions gone for longer than the pause window are deleted, so
+// Reports of sessions gone for longer than a closed front can show (7 days) are deleted, so
 // the folder (read on every computed refresh) stays the size of recent work.
 async function pruneOld(io: Io, claudeHome: string, reports: Report[], live: LiveSession[], now: number): Promise<Report[]> {
   const liveIds = new Set(live.map(one => one.sessionId))
-  const old = reports.filter(one => !liveIds.has(one.sessionId) && now - one.updatedAt > PAUSE_WINDOW_MS)
+  const old = reports.filter(one => !liveIds.has(one.sessionId) && now - one.updatedAt > CLOSED_KEEP_MS)
   await Promise.all(old.map(one => io.run(['rm', '-f', reportPath(claudeHome, one.sessionId)]).catch(() => null)))
   return reports.filter(one => !old.includes(one))
 }
@@ -94,7 +94,7 @@ function ownBranch(front: Front): boolean {
 }
 
 async function isOver(io: Io, front: Front, chip: PrChip | null): Promise<boolean> {
-  if (front.section !== 'paused' || !ownBranch(front) || front.repoRoot === null || front.branch === null) return false
+  if (front.section !== 'closed' || !ownBranch(front) || front.repoRoot === null || front.branch === null) return false
   return chip?.state === 'MERGED' || branchGone(io, front.repoRoot, front.branch)
 }
 

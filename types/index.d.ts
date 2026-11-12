@@ -51,9 +51,11 @@ export type PanelRow = {
   openPath: string | null
   // An open session to take the user to.
   canGo: boolean
+  // No session is open: the row can be closed off the panel.
+  canClose: boolean
 }
 
-export type PanelView = { waiting: PanelRow[]; running: PanelRow[]; idle: PanelRow[]; paused: PanelRow[] }
+export type PanelView = { waiting: PanelRow[]; running: PanelRow[]; idle: PanelRow[]; closed: PanelRow[] }
 
 export type Selected = string | null
 

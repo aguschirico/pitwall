@@ -147,11 +147,11 @@ test('a session on main with nothing pending says so, and an unreported one too'
 })
 
 test('a front with an open PR and no session on it waits for the user', async () => {
-  const idle = { ...front(null), section: 'paused' as const, sessions: front(null).sessions.map(one => ({ ...one, live: null })) }
+  const idle = { ...front(null), section: 'closed' as const, sessions: front(null).sessions.map(one => ({ ...one, live: null })) }
   const view = toView([idle], NOW, { pr: { [idle.id]: OPEN_PR } })
   expect(view.waiting[0]?.tag).toBe('PR')
   expect(view.waiting[0]?.detail).toBe('→ PR #128 open, CI ok: needs your review or merge')
-  expect(view.paused.length).toBe(0)
+  expect(view.closed.length).toBe(0)
 })
 
 test('a row says how long ago in words', async () => {

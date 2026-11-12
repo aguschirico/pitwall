@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { approvalCheckFrom, notifyStuckFrom, refreshMsFrom, stuckMsFrom } from '../src/settings'
+import { approvalCheckFrom, notifyStuckFrom, refreshMsFrom, stuckMsFrom, closedMsFrom } from '../src/settings'
 
 test('no refresh interval set means 5 seconds', async () => {
   expect(refreshMsFrom({})).toBe(5_000)
@@ -45,4 +45,14 @@ test('the stuck notification is on unless the user turned it off', async () => {
   expect(notifyStuckFrom({ stuckNotify: true })).toBe(true)
   expect(notifyStuckFrom({ stuckNotify: false })).toBe(false)
   expect(notifyStuckFrom({ stuckNotify: 'false' })).toBe(false)
+})
+
+test('a closed front stays 1 day unless the user picks up to 7', async () => {
+  const DAY = 24 * 60 * 60 * 1000
+  expect(closedMsFrom({})).toBe(DAY)
+  expect(closedMsFrom({ closedDays: 3 })).toBe(3 * DAY)
+  expect(closedMsFrom({ closedDays: '5' })).toBe(5 * DAY)
+  expect(closedMsFrom({ closedDays: 30 })).toBe(7 * DAY)
+  expect(closedMsFrom({ closedDays: 0 })).toBe(DAY)
+  expect(closedMsFrom({ closedDays: 'soon' })).toBe(DAY)
 })
