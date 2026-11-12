@@ -144,7 +144,17 @@ export async function startReport($: Engine, cwd: string, sessionId?: string): P
       terminal: await terminalOf($),
     }
     const before = await earlierReport($, id)
-    current = before ? { ...before, ...fresh, title: before.title, activity: before.activity, state: before.state } : fresh
+    // Only where the session is, and how to reach its terminal, are read anew:
+    // its wait, last message and steps stay, or a reload shows a waiting session as idle.
+    const kept = before && {
+      title: before.title,
+      activity: before.activity,
+      state: before.state,
+      waiting: before.waiting,
+      lastMessage: before.lastMessage ?? null,
+      steps: before.steps ?? [],
+    }
+    current = before ? { ...before, ...fresh, ...kept } : fresh
     await saveReport($, {})
   } catch {
     current = null
@@ -263,7 +273,9 @@ export function registerReporter(on: On): void {
       turnSeq += 1
       await followSessionId($)
       pending = null
-      const title = current?.title ?? firstLine(e.text)
+      // A title saved before pastes were skipped (a bare paste tag) is no title.
+      const saved = current?.title ? firstLine(current.title) : null
+      const title = saved ?? firstLine(e.text)
       await saveReport($, { state: 'running', waiting: null, title })
     }
     return next(e)

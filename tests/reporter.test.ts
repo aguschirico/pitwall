@@ -199,12 +199,17 @@ test('a reload keeps what the session had reported', async ($, on) => {
     state: 'waiting',
     waiting: { kind: 'decision', why: 'w', question: 'q', options: [], recap: '', since: 1, classified: true },
     updatedAt: 1,
+    lastMessage: 'Shall I start the dev server?',
+    steps: ['Bash: ls'],
   }
   const seen = engine(on, { existing })
   await $.session.start(START)
 
   expect(seen.last()?.state).toBe('waiting')
   expect(seen.last()?.title).toBe('Search tools')
+  expect(seen.last()?.waiting?.why).toBe('w')
+  expect(seen.last()?.lastMessage).toBe('Shall I start the dev server?')
+  expect(seen.last()?.steps).toEqual(['Bash: ls'])
 })
 
 test('a turn the user interrupted leaves the session idle', async ($, on) => {
@@ -326,6 +331,26 @@ test('the title skips a pasted block and takes the words around it', async ($, o
   const seen = engine(on)
   await $.session.start(START)
   await $.turn.start({ text: '<pasted_content id="ad6e">\nERROR deadlock on orders\n</pasted_content>\nmirá este log', turnId: 't1' })
+
+  expect(seen.last()?.title).toBe('mirá este log')
+})
+
+test('a title saved from a bare paste tag gives way to the next prompt', async ($, on) => {
+  const existing: Report = {
+    v: 1,
+    sessionId: 's1',
+    cwd: '/repo',
+    repoRoot: '/repo',
+    branch: 'feat/x',
+    title: '<pasted_content id="ad6e">',
+    activity: null,
+    state: 'idle',
+    waiting: null,
+    updatedAt: 1,
+  }
+  const seen = engine(on, { existing })
+  await $.session.start(START)
+  await $.turn.start({ text: 'mirá este log', turnId: 't1' })
 
   expect(seen.last()?.title).toBe('mirá este log')
 })
