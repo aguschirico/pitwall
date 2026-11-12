@@ -5,7 +5,7 @@ import type { Hook, On, PromptOrigin } from 'claude-code'
 
 import { currentFronts, frontIdForNumber, hasRefreshed, isCoordinating, panelNumbers, refresh } from './coordinator'
 import { readOverrides, writeOverrides } from './overrides'
-import { TAG } from './format'
+import { repoKey, repoLabels, TAG } from './format'
 import type { Front, FrontOverrides, FrontSession } from './fronts'
 import { goToFront } from './focus'
 import { approvalRefusal, planRelay, refusal, relayMessage, type Author } from './relay'
@@ -156,7 +156,7 @@ function frontSessionFor(to: string): FrontSession | null {
 
 const COORDINATE_USAGE =
   'Usage: /coordinate <number> <text>, or /coordinate <number> go to jump to that session, with the row number on the panel. ' +
-  'To send one text to several rows: /coordinate 1,3,4 <text>, or /coordinate all <text>.'
+  'To send one text to several rows: /coordinate 1,3,4 <text>, /coordinate all <text> (the rows of this repo), or /coordinate <repo> <text>.'
 
 // Only the user's own Enter, at the terminal or through Remote Control, sends
 // to several rows: a scheduled prompt or a task's notification never does.
@@ -164,13 +164,43 @@ function isUsersGesture(origin: PromptOrigin): boolean {
   return origin.kind === 'composer' || origin.kind === 'bridge'
 }
 
-// "1", "1,3,4" or "all": the rows' front ids, or why not. A number nobody has
-// stops the whole send: a typo must not send the words to the rows around it.
-function targetsOf(list: string): string[] | string {
-  const numbers = /^all$/i.test(list) ? panelNumbers() : [...new Set(list.split(',').map(Number))]
-  if (numbers.length === 0) return 'Nothing on the panel to send to.'
+// The panel's rows, in their numbers' order, of the repository with this key.
+function rowsOfRepo(key: string): string[] {
+  const inRepo = new Set(currentFronts().filter(front => repoKey(front) === key).map(front => front.id))
+  return panelNumbers().flatMap(number => {
+    const id = frontIdForNumber(number)
+    return id !== undefined && inRepo.has(id) ? [id] : []
+  })
+}
+
+// The repository this coordinator runs in, keyed the way the panel groups fronts.
+async function ownRepoKey($: Engine): Promise<string> {
+  const repo = await $.session.repo()
+  return repo?.root ?? (await $.session.cwd())
+}
+
+// "1", "1,3,4", "all" or a repo's name: the rows' front ids, or why not. With
+// several repos on the panel, "all" is the rows of the coordinator's own: a
+// word for "this project" must not reach another one. Numbers reach any row.
+// A number or a name nobody has stops the whole send: a typo must not send the
+// words to the rows around it.
+async function targetsOf($: Engine, list: string): Promise<string[] | string> {
+  const repos = repoLabels(currentFronts())
+  if (/^all$/i.test(list)) {
+    const ids = repos.length < 2 ? panelNumbers().flatMap(number => frontIdForNumber(number) ?? []) : rowsOfRepo(await ownRepoKey($))
+    return ids.length > 0 ? ids : 'No row of this repo on the panel: nothing was sent. Name a repo (/coordinate <repo> <text>) or list the rows.'
+  }
+  if (!/^\d/.test(list)) {
+    const repo = repos.find(one => one.label.toLowerCase() === list.toLowerCase())
+    if (!repo) {
+      const names = repos.map(one => one.label).join(', ')
+      return `No repo called ${JSON.stringify(list)} on the panel: nothing was sent. The repos are ${names}.`
+    }
+    const ids = rowsOfRepo(repo.key)
+    return ids.length > 0 ? ids : `No row of ${repo.label} on the panel: nothing was sent.`
+  }
   const ids: string[] = []
-  for (const number of numbers) {
+  for (const number of new Set(list.split(',').map(Number))) {
     const id = frontIdForNumber(number)
     if (!id) return `No row has number ${number} on the panel: nothing was sent.`
     ids.push(id)
@@ -180,16 +210,16 @@ function targetsOf(list: string): string[] | string {
 
 // "/coordinate 2 pick B": the text goes to the front shown with number 2, whatever
 // its section, under the same rules as send_to_front, without the model in between.
-// "/coordinate 1,3 ..." and "/coordinate all ..." send it to each of those rows.
+// "/coordinate 1,3 ...", "/coordinate all ..." and "/coordinate <repo> ..." send it to each of those rows.
 async function coordinate($: Engine, args: string, origin: PromptOrigin): Promise<string> {
   if (!isCoordinating()) return 'This session does not have the panel open: run /panel first.'
-  const match = /^\s*(all|\d+(?:\s*,\s*\d+)*)\s+(\S[\s\S]*)$/i.exec(args)
+  const match = /^\s*(\d+(?:\s*,\s*\d+)*|[^\s\d,][^\s,]*)\s+(\S[\s\S]*)$/i.exec(args)
   if (!match) return COORDINATE_USAGE
   const list = (match[1] ?? '').replace(/\s+/g, '')
   const text = (match[2] ?? '').trim()
-  const many = /^all$/i.test(list) || list.includes(',')
+  const many = !/^\d+$/.test(list)
   if (many && !isUsersGesture(origin)) return 'Sending to several rows takes your own /coordinate, typed at the prompt.'
-  const targets = targetsOf(list)
+  const targets = await targetsOf($, list)
   if (typeof targets === 'string') return targets
   const [only] = targets
   if (/^go$/i.test(text)) return targets.length === 1 && only ? goToFront($, only) : 'go takes one row number.'

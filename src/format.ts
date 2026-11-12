@@ -163,7 +163,7 @@ function prWait(front: Front, pr: PrChip | null): PanelRow['detail'] {
 
 // Which repository a front belongs to: its main working tree (worktrees
 // included), else the folder its session runs in.
-function repoKey(front: Front): string {
+export function repoKey(front: Front): string {
   return front.repoRoot ?? folderOf(front) ?? front.id
 }
 
@@ -176,11 +176,16 @@ const lastPart = (path: string): string => path.split('/').filter(Boolean).pop()
 // share a name. Colors follow the labels' order, so a repo keeps its color
 // while the same repos are open. One repository on the panel needs no headers.
 export function repoGroups(fronts: Front[]): Map<string, PanelGroup> {
-  const keys = [...new Set(fronts.map(repoKey))]
-  if (keys.length < 2) return new Map()
-  const label = (key: string) => (keys.filter(other => lastPart(other) === lastPart(key)).length > 1 ? shortPath(key) : lastPart(key))
-  const labels = keys.map(key => ({ key, label: label(key) })).sort((a, b) => a.label.localeCompare(b.label))
+  const labels = repoLabels(fronts)
+  if (labels.length < 2) return new Map()
   return new Map(labels.map((one, index) => [one.key, { label: one.label, color: GROUP_COLORS[index % GROUP_COLORS.length] ?? 'claude' }]))
+}
+
+// Each repository's key and the name its header shows, in alphabetical order.
+export function repoLabels(fronts: Front[]): { key: string; label: string }[] {
+  const keys = [...new Set(fronts.map(repoKey))]
+  const label = (key: string) => (keys.filter(other => lastPart(other) === lastPart(key)).length > 1 ? shortPath(key) : lastPart(key))
+  return keys.map(key => ({ key, label: label(key) })).sort((a, b) => a.label.localeCompare(b.label))
 }
 
 // A section's rows with each repository's together, the repos in alphabetical

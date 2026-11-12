@@ -106,9 +106,11 @@ show. Built and tested on Claude Code 2.1.322 on macOS.
 2. Click a row under **Waiting on you** to see why it waits.
 3. Answer with `/coordinate <number> <text>`, or `/coordinate <number> go` to jump to that session.
    On an open question, **Answer here** writes `/coordinate <number> ` in the prompt for you.
-   To tell several sessions the same thing, `/coordinate 1,3,4 <text>` or `/coordinate all <text>`:
-   each row takes it under its own rules, and the answer lists where it went and where it did not.
-   Any row's number works, not only the waiting ones.
+   To tell several sessions the same thing, `/coordinate 1,3,4 <text>`, `/coordinate all <text>`
+   or `/coordinate <repo> <text>`: each row takes it under its own rules, and the answer lists
+   where it went and where it did not. With several repos on the panel, `all` means the rows of
+   the repo the coordinator runs in, and `<repo>` is a header's name (`/coordinate blog ...`).
+   Any row's number works, in any repo, not only the waiting ones.
 4. Ask the coordinator about the fronts in plain words.
 
 ## Options

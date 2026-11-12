@@ -119,10 +119,13 @@ few steps, the options it offered, and where and how to answer.
   An open question's **Answer here** button puts `/coordinate <n> ` in the coordinator's prompt
   box (`$.prompt.fill`) and sends nothing; a draft already there that is not a `/coordinate`
   line is left alone, with a toast.
-  `/coordinate 1,3,4 <text>` and `/coordinate all <text>` send one typed text to several rows,
-  each through the same rules as a single row, and answer with where it went and where not. Only
-  the user's own Enter (`composer` or `bridge` origin) sends to several rows, and a number that no
-  row has stops the whole send, so a typo never reaches the rows around it.
+  `/coordinate 1,3,4 <text>`, `/coordinate all <text>` and `/coordinate <repo> <text>` send one
+  typed text to several rows, each through the same rules as a single row, and answer with where
+  it went and where not. With several repos on the panel `all` is the rows of the coordinator's
+  own repo (a "tell everyone" about one project must not reach another), and `<repo>` is a
+  header's name; numbers reach rows in any repo. Only the user's own Enter (`composer` or `bridge`
+  origin) sends to several rows, and a number or a repo name that the panel does not have stops
+  the whole send, so a typo never reaches the rows around it.
   The same yes is asked when the model writes to a front's session with SendMessage directly.
 - **Approvals are never relayed.** The drill-down says which session to go to. A session waiting
   on an approval (OK push, an open permission dialog) takes no message through the panel at all,
