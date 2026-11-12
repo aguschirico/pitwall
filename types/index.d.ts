@@ -62,6 +62,16 @@ export type PanelView = { waiting: PanelRow[]; running: PanelRow[]; idle: PanelR
 export type Selected = string | null
 
 declare module 'claude-code' {
+  // The coordinator's own tools (src/tools.ts SPECS), so a tool.call hook on
+  // one narrows to its arguments. Kept in step with each inputSchema.
+  interface McpToolInputs {
+    mcp__pitwall__list_fronts: {}
+    mcp__pitwall__send_to_front: { frontId: string; text: string }
+    mcp__pitwall__merge_fronts: { fromId: string; intoId: string }
+    mcp__pitwall__rename_front: { frontId: string; name: string }
+    mcp__pitwall__dismiss_front: { frontId: string }
+  }
+
   interface PluginState {
     'pitwall': {
       view: Shaped<PanelView>

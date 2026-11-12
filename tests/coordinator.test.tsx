@@ -2,7 +2,7 @@ import { expect, mock, test, type MockClock, type TestBody } from 'claude-code/t
 
 import { DEFAULT_REFRESH_MS as REFRESH_MS } from '../src/coordinator'
 import { PANE_ID } from '../src/pane'
-import { serializeReport, type Report } from '../src/report'
+import { serializeReport, type Report, type Waiting } from '../src/report'
 
 type TestOn = Parameters<TestBody>[1]
 type Ran = { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: boolean; isStderrTruncated: boolean }
@@ -42,9 +42,10 @@ function report(id: string, patch: Partial<Report>): Report {
   }
 }
 
+const SEARCH_WAIT: Waiting = { kind: 'decision', why: 'pick A or B', question: 'Go with A or B?', options: ['A', 'B'], recap: '', since: NOW - 120_000, classified: true }
 const SEARCH = report('search', {
   state: 'waiting',
-  waiting: { kind: 'decision', why: 'pick A or B', question: 'Go with A or B?', options: ['A', 'B'], recap: '', since: NOW - 120_000, classified: true },
+  waiting: SEARCH_WAIT,
   lastMessage: 'I tried both options on real data.\nGo with A or B?',
   steps: ['Bash: pnpm test', 'Edit: src/cache.ts'],
 })
@@ -97,6 +98,7 @@ function engine(on: TestOn, world: World): MockClock {
   mock.env(on, world.configDir ? { HOME, CLAUDE_CONFIG_DIR: world.configDir } : { HOME })
   on('session.id', () => ({ value: 'coord' }))
   on('session.repo', () => ({ value: null }))
+  on('session.cwd', () => ({ value: '/repo' }))
   on('fs.write', (_, e) => {
     world.files[e.path] = e.text
     return { value: undefined }
@@ -878,7 +880,7 @@ test('/coordinate without text explains how to use it', async ($, on) => {
 
   expect(done.text).toBe(
     'Usage: /coordinate <number> <text>, or /coordinate <number> go to jump to that session, with the row number on the panel. ' +
-      'To send one text to several rows: /coordinate 1,3,4 <text>, or /coordinate all <text>.',
+      'To send one text to several rows: /coordinate 1,3,4 <text>, /coordinate all <text> (the rows of this repo), or /coordinate <repo> <text>.',
   )
 })
 
@@ -1040,7 +1042,7 @@ test('Answer here keeps a draft the user was writing', async ($, on) => {
 
 test('an approval has no Answer here button', async ($, on) => {
   const seen = world()
-  seen.files[`${REPORTS}/search.json`] = serializeReport({ ...SEARCH, waiting: { ...SEARCH.waiting, kind: 'ok-push' } })
+  seen.files[`${REPORTS}/search.json`] = serializeReport({ ...SEARCH, waiting: { ...SEARCH_WAIT, kind: 'ok-push' } })
   const clock = engine(on, seen)
   await openPanel($)
   await clock.settle()
@@ -1069,6 +1071,57 @@ test('/coordinate all sends your words to every row, approval words included', a
   expect(done.text).toBe('Sent to 2: "search", "docs".\nNot sent to 1:\n  "old": "old" has no open session.')
 })
 
+// The panel with the blog repository next to /repo, where the coordinator runs.
+function twoRepos(): World {
+  const seen = world()
+  seen.files[`${REPORTS}/blog.json`] = serializeReport(BLOG)
+  seen.files[`${SESSIONS}/3.json`] = JSON.stringify({ pid: 3, sessionId: 'blog', cwd: '/blog', name: 's-blog', status: 'idle', updatedAt: NOW })
+  return seen
+}
+
+test('with several repos on the panel, /coordinate all sends to the rows of your own repo only', async ($, on) => {
+  const seen = twoRepos()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run(coordinate('all no pushees nada, estamos en demo'))
+
+  expect(seen.sent.map(one => one.to)).toEqual(['search', 'docs'])
+  expect(done.text).toBe('Sent to 2: "search", "docs".\nNot sent to 1:\n  "old": "old" has no open session.')
+})
+
+test('/coordinate with a repo name sends to that repo\'s rows', async ($, on) => {
+  const seen = twoRepos()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run(coordinate('Blog read the notes'))
+
+  expect(seen.sent.map(one => one.to)).toEqual(['blog'])
+  expect(done.text).toBe('Sent to 1: "feat/post".')
+})
+
+test('a repo name nobody has sends nothing', async ($, on) => {
+  const seen = twoRepos()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run(coordinate('shop read the notes'))
+
+  expect(seen.sent).toEqual([])
+  expect(done.text).toBe('No repo called "shop" on the panel: nothing was sent. The repos are blog, repo.')
+})
+
+test('a list of numbers still reaches rows in any repo', async ($, on) => {
+  const seen = twoRepos()
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const done = await $.command.run(coordinate('1,3 read the notes'))
+
+  expect(seen.sent.map(one => one.to)).toEqual(['blog', 'docs'])
+})
+
 test('/coordinate 1,2 sends to those rows only', async ($, on) => {
   const seen = world()
   const clock = engine(on, seen)
@@ -1093,7 +1146,7 @@ test('a list with a number nobody has sends nothing', async ($, on) => {
 
 test('a row waiting on an approval takes nothing from /coordinate all, the others do', async ($, on) => {
   const seen = world()
-  seen.files[`${REPORTS}/search.json`] = serializeReport({ ...SEARCH, waiting: { ...SEARCH.waiting, kind: 'ok-push' } })
+  seen.files[`${REPORTS}/search.json`] = serializeReport({ ...SEARCH, waiting: { ...SEARCH_WAIT, kind: 'ok-push' } })
   const clock = engine(on, seen)
   await openPanel($)
   await clock.settle()
@@ -1145,7 +1198,7 @@ test('a row waiting on a push takes you to its session without opening it', asyn
   const seen = world()
   seen.files[`${REPORTS}/search.json`] = serializeReport({
     ...SEARCH,
-    waiting: { ...SEARCH.waiting, kind: 'ok-push' },
+    waiting: { ...SEARCH_WAIT, kind: 'ok-push' },
     terminal: { program: 'ghostty' },
   })
   const clock = engine(on, seen)
