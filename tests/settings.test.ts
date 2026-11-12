@@ -19,12 +19,13 @@ test('a refresh interval that is not a number falls back to 5 seconds', async ()
   expect(refreshMsFrom({ refreshSeconds: '' })).toBe(5_000)
 })
 
-test('the approval check is drafted by default, and takes only its three values', async () => {
-  expect(approvalCheckFrom({})).toBe('drafted')
+test('the approval check is off by default, and takes only its three values', async () => {
+  expect(approvalCheckFrom({})).toBe('off')
+  expect(approvalCheckFrom({ approvalCheck: 'drafted' })).toBe('drafted')
   expect(approvalCheckFrom({ approvalCheck: 'strict' })).toBe('strict')
   expect(approvalCheckFrom({ approvalCheck: 'off' })).toBe('off')
-  expect(approvalCheckFrom({ approvalCheck: 'loose' })).toBe('drafted')
-  expect(approvalCheckFrom({ approvalCheck: 3 })).toBe('drafted')
+  expect(approvalCheckFrom({ approvalCheck: 'loose' })).toBe('off')
+  expect(approvalCheckFrom({ approvalCheck: 3 })).toBe('off')
 })
 
 test('a wait is stuck after 5 minutes unless the user set another threshold', async () => {

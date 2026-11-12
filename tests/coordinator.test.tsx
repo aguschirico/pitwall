@@ -337,7 +337,7 @@ test('what goes is what the dialog showed, and a text too long to show whole doe
   expect(String(long.result)).toBe('Not sent: too long to confirm in one dialog. Keep it under 1000 characters.')
 })
 
-test('an approval is refused before the user is even asked', async ($, on) => {
+test('an approval is refused before the user is even asked', { options: { approvalCheck: 'drafted' } }, async ($, on) => {
   const seen = { ...world(), confirm: 'Send' }
   const clock = engine(on, seen)
   await openPanel($)
@@ -348,7 +348,7 @@ test('an approval is refused before the user is even asked', async ($, on) => {
   expect(seen.sent).toEqual([])
 })
 
-test('an approval is not sent and names the session to go to', async ($, on) => {
+test('an approval is not sent and names the session to go to', { options: { approvalCheck: 'drafted' } }, async ($, on) => {
   const seen = world()
   const clock = engine(on, seen)
   await openPanel($)
@@ -394,7 +394,7 @@ test('the fronts are listed for the model with their ids', async ($, on) => {
   expect(String(done.result).includes('Decision')).toBe(true)
 })
 
-test('a message that goes around the tool is still held to the approval rule', async ($, on) => {
+test('a message that goes around the tool is still held to the approval rule', { options: { approvalCheck: 'drafted' } }, async ($, on) => {
   const seen = world()
   const clock = engine(on, seen)
   await openPanel($)
@@ -407,7 +407,7 @@ test('a message that goes around the tool is still held to the approval rule', a
   expect(seen.sent).toEqual([])
 })
 
-test('a message to a session that is no front goes through, but never with an approval in it', async ($, on) => {
+test('a message to a session that is no front goes through, but never with an approval in it', { options: { approvalCheck: 'drafted' } }, async ($, on) => {
   const seen = world()
   const clock = engine(on, seen)
   await openPanel($)
@@ -774,7 +774,7 @@ test('with the strict check /coordinate refuses an approval word', { options: { 
   expect(done.text?.startsWith('Not sent')).toBe(true)
 })
 
-test('by default what the model drafts is still checked', async ($, on) => {
+test('with the drafted check what the model drafts is checked', { options: { approvalCheck: 'drafted' } }, async ($, on) => {
   const seen = world()
   const clock = engine(on, seen)
   await openPanel($)
@@ -783,6 +783,18 @@ test('by default what the model drafts is still checked', async ($, on) => {
 
   expect(sent.isDelivered).toBe(false)
   expect(seen.sent).toEqual([])
+})
+
+test('by default a warning that names deploy goes to a front once you say yes', async ($, on) => {
+  const seen = { ...world(), confirm: 'Send' }
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const sent = await $.session.send({ to: 's-search', text: 'No hagas deploy: estamos en una ventana de demo.', origin: { kind: 'model' } })
+
+  expect(sent.isDelivered).toBe(true)
+  expect(seen.asked).toHaveLength(1)
+  expect(seen.sent).toHaveLength(1)
 })
 
 test('with the check off the model may name merge, and still needs your yes for a front', { options: { approvalCheck: 'off' } }, async ($, on) => {

@@ -78,13 +78,15 @@ export function notifiesStuck(): boolean {
   return notifyStuck
 }
 
-// Which messages the approval word rule reads. "drafted": only what the
-// coordinator's model wrote (what the user typed with /coordinate goes as
-// typed); "strict": every message; "off": none. Whatever the choice, a session
-// waiting on an approval takes no message, and drafted text needs the user's yes.
-export const APPROVAL_CHECKS = ['drafted', 'strict', 'off'] as const
+// Which messages the approval word rule reads. "off" (the default): none, since
+// a word match cannot tell "push it" from "don't push, we are in a demo", and
+// the warnings are what sessions most need to pass along; "drafted": what the
+// coordinator's model wrote; "strict": every message, the user's included.
+// Whatever the choice, a session waiting on an approval takes no message, and
+// drafted text needs the user's yes.
+export const APPROVAL_CHECKS = ['off', 'drafted', 'strict'] as const
 export type ApprovalCheck = (typeof APPROVAL_CHECKS)[number]
-export const DEFAULT_APPROVAL_CHECK: ApprovalCheck = 'drafted'
+export const DEFAULT_APPROVAL_CHECK: ApprovalCheck = 'off'
 
 function isApprovalCheck(value: unknown): value is ApprovalCheck {
   return APPROVAL_CHECKS.some(one => one === value)

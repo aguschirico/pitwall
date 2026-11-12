@@ -67,12 +67,10 @@ blog
 
 - **It does not relay approvals.** Commit, push, PR, merge, deploy, production changes and tool
   permissions are answered in the session itself. The panel tells you which session and what to
-  answer. A session waiting on one of those takes no message through the panel at all, and no
-  message the coordinator's model drafts goes out with an approval word in it, in English or
-  Spanish, also when the word is hidden behind invisible characters, lookalike letters or spelled
-  out letter by letter. What you type with `/coordinate` goes as typed, unless you set the check to
-  `strict` (see Options). A refusal costs you a window switch; a wrong relay could cost a push to
-  production.
+  answer. A session waiting on one of those takes no message through the panel at all, since any
+  words could be read as the answer. Other messages may name them: "don't deploy, we are in a
+  demo" is a warning, not an OK, and warnings are what sessions most need to pass along. If you
+  want messages refused for the words alone, turn on the approval word check (see Options).
 - **It does not act on its own.** Words you type with `/coordinate` go as yours. Words the
   coordinator's model drafts go only after you confirm them in Claude Code's own dialog, which
   neither the model nor another session can answer for you. The receiving session is told which
@@ -125,11 +123,12 @@ show. Built and tested on Claude Code 2.1.322 on macOS.
 
   Then restart the session, or run `/reload-plugins`.
 - **Approval word check**: which messages are refused when they mention push, PR, merge, deploy
-  or prod.
-  - `drafted` (default): only what the coordinator's model writes. Your `/coordinate` words go as
-    you typed them, so "don't merge yet" reaches the session.
+  or prod, in English or Spanish, also when the word is hidden behind invisible characters,
+  lookalike letters or spelled out letter by letter.
+  - `off` (default): none. A word match cannot tell "push it" from "don't push yet", so it would
+    stop the warnings too.
+  - `drafted`: what the coordinator's model writes. Your `/coordinate` words go as you typed them.
   - `strict`: every message, yours included.
-  - `off`: none.
 
   Whatever you pick, a session waiting on an approval takes no message, and what the model drafts
   still needs your **Send** in the dialog. Set it the same way:

@@ -28,7 +28,7 @@ const SPECS = [
   {
     name: 'send_to_front',
     description:
-      "Passes the user's words, verbatim, to the session of a front. Ask the user first when it is unclear which front they mean. The user is asked to confirm the exact text in a dialog before it goes. Never use it for approvals (commit, push, PR, merge, deploy, tool permissions): those are answered in the session itself, and the tool refuses them.",
+      "Passes the user's words, verbatim, to the session of a front. Ask the user first when it is unclear which front they mean. The user is asked to confirm the exact text in a dialog before it goes. Never use it for approvals (commit, push, PR, merge, deploy, tool permissions): those are answered in the session itself, and a session waiting on one takes no message. Warnings that name them (\"don't deploy, we are in a demo\") are fine.",
     inputSchema: { type: 'object', properties: { frontId: FRONT_ID, text: { type: 'string' } }, required: ['frontId', 'text'] },
   },
   {

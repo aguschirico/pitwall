@@ -1,6 +1,6 @@
 {
   "name": "pitwall",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "A pit wall for your Claude Code sessions: every session on this machine, which ones wait on you, and why",
   "author": {
     "name": "Augusto Chirico",
@@ -27,13 +27,13 @@
     "approvalCheck": {
       "type": "string",
       "title": "Approval word check",
-      "description": "Which messages are refused when they mention push, PR, merge, deploy or prod. drafted: only what the coordinator's model writes (your /coordinate words go as typed). strict: every message. off: none. A session waiting on an approval never takes a message either way.",
+      "description": "Which messages are refused when they mention push, PR, merge, deploy or prod. off (default): none, so a warning like \"don't deploy, we are in a demo\" goes through. drafted: what the coordinator's model writes. strict: every message, yours included. A session waiting on an approval never takes a message either way, and what the model drafts always needs your yes.",
       "options": [
+        "off",
         "drafted",
-        "strict",
-        "off"
+        "strict"
       ],
-      "default": "drafted"
+      "default": "off"
     },
     "stuckMinutes": {
       "type": "number",

@@ -126,10 +126,11 @@ few steps, the options it offered, and where and how to answer.
   The same yes is asked when the model writes to a front's session with SendMessage directly.
 - **Approvals are never relayed.** The drill-down says which session to go to. A session waiting
   on an approval (OK push, an open permission dialog) takes no message through the panel at all,
-  since any words could be read as the answer. No message the coordinator's model drafts, to a
-  front or to anyone else, goes out with an approval word in it; the user's `approvalCheck` option
-  extends the check to what they type with `/coordinate` (`strict`) or turns it off (`off`), and
-  `drafted` is the default. Detection is conservative and bilingual
+  since any words could be read as the answer. Other messages may name an approval: a word
+  match cannot tell "push it" from "don't push, we are in a demo", and in use the refused
+  messages were all warnings of that kind, so the word check is off by default. The user's
+  `approvalCheck` option turns it on for what the coordinator's model drafts (`drafted`), or for
+  every message (`strict`). Detection is conservative and bilingual
   (English and Spanish), and reads the text folded first: Unicode NFKC, invisible characters
   dropped, common Cyrillic and Greek lookalikes mapped to Latin, letters spelled out one by one
   joined. A refusal costs a window switch, a wrong relay can cost a production change.
