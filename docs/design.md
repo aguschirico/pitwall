@@ -150,6 +150,11 @@ few steps, the options it offered, and where and how to answer.
 - **Primary: the reporter.** At the end of each turn it marks the session as waiting at once, then
   classifies the last message with a small model (kind, why, question, options, recap, topic). A
   classification that lands after the next turn started is dropped.
+- **The topic names the session, not the turn.** Judged from the last message alone it named the
+  step of the moment ("Revisión PR #4002"), and the rows kept changing name. The model also gets
+  the session's context (the first prompt, Claude Code's conversation title, the branch) and is told
+  to name the goal or area, with no PR or issue numbers. A topic that only names one
+  (`#4002`, `PR 12`) never replaces one that does not.
 - A pending tool permission is **Manual** by definition.
   It shows once the ask has lasted 8 seconds: auto mode's classifier answers most asks in less, and
   a dialog the person has to answer is still open by then. A command the engine already draws as
@@ -178,6 +183,20 @@ and gh, and writes it; the others read it. A panel refreshes every 5 seconds unl
 another interval (`refreshSeconds` in the plugin's options, held to 2..120), and a snapshot older
 than that panel's interval counts as stale. PR chips are the exception: each is asked of GitHub at
 most once a minute, the snapshot keeping when it was fetched (`prAt`) so the next writer reuses it.
+
+### Main line
+
+- Every row is measured against origin's main (`origin/HEAD`, else local `main`), sessions on
+  `main` included: they also count the commits over their own upstream as not pushed. The row
+  leads with its working tree: `main checkout`, or `worktree <folder>` for a linked one (`git
+  rev-parse`: a linked worktree has a git dir of its own), and `on main` on a shared branch.
+- Each repository shows its local `main` against `origin/main` under its header (on top, for a
+  panel of one repository). Amber when more than 20 behind or when fetching fails.
+- Origin's main is only as fresh as its last fetch, so the snapshot writer runs
+  `git fetch --quiet --no-tags --no-write-fetch-head origin main` per repository, at most every 5
+  minutes (`fetches` in the snapshot). No prompt can reach a terminal: `GIT_TERMINAL_PROMPT=0`, and
+  ssh in batch mode unless the repo or the user set `core.sshCommand`. No FETCH_HEAD is written, so
+  a session's own fetch or pull is not raced; only `refs/remotes/origin/main` moves.
 
 ### Portability
 

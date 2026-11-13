@@ -5,7 +5,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Hook, On } from 'claude-code'
 
-import type { PanelRow, PanelView } from '../types'
+import type { PanelMain, PanelRow, PanelSections, PanelView } from '../types'
 import { repoParts, waitingHeader } from './format'
 import { goToFront } from './focus'
 import { dismissFronts } from './overrides'
@@ -17,12 +17,12 @@ type Engine = Parameters<Hook<'ui.render'>>[0]
 export const PANE_ID = 'pitwall'
 export const PANE_TITLE = 'Pitwall'
 
-const EMPTY: PanelView = { waiting: [], running: [], idle: [], closed: [] }
+const EMPTY: PanelView = { waiting: [], running: [], idle: [], closed: [], mains: [] }
 const DEFAULT_ROWS = 40
 
 // Change a tag when its value's fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-11' })
+const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-12' })
 const selected = atom({ plugin: 'pitwall', key: 'selected' } as const, null, { shape: 'selected-1' })
 const gitOpen = atom({ plugin: 'pitwall', key: 'gitOpen' } as const, null, { shape: 'git-open-1' })
 
@@ -71,7 +71,7 @@ function bodyRows(e: unknown): number {
   return typeof rows === 'number' && rows > 0 ? rows : DEFAULT_ROWS
 }
 
-function allRows(panel: PanelView): PanelRow[] {
+function allRows(panel: PanelSections): PanelRow[] {
   return [...panel.waiting, ...panel.running, ...panel.idle, ...panel.closed]
 }
 
@@ -80,7 +80,7 @@ type Draw = (row: PanelRow, lead: string, leadColor: string | undefined, dim: bo
 // The three sections for some of the rows, each row with its number on the
 // whole panel. `showEmpty` draws a section with nothing in it, as the panel of
 // one repository does; inside a repository only sections with rows show.
-function sections(els: Elements, part: PanelView, numberOf: (row: PanelRow) => number, draw: Draw, showEmpty: boolean) {
+function sections(els: Elements, part: PanelSections, numberOf: (row: PanelRow) => number, draw: Draw, showEmpty: boolean) {
   const { Text } = els
   const header = (rows: PanelRow[], text: string) => showEmpty || rows.length > 0 ? [text] : []
   return [
@@ -101,6 +101,17 @@ function sections(els: Elements, part: PanelView, numberOf: (row: PanelRow) => n
   ]
 }
 
+
+// A repository's main line under its header, or on top of a panel of one.
+function mainLine(els: Elements, main: PanelMain | undefined) {
+  const { Text } = els
+  if (!main) return null
+  return (
+    <Text key={`main:${main.repo ?? ''}`} color={main.warn ? 'warning' : undefined} dimColor={!main.warn}>
+      {main.text}
+    </Text>
+  )
+}
 
 async function drawPanel($: Engine, els: Elements, rows: number) {
   const { Box, Text } = els
@@ -124,12 +135,14 @@ async function drawPanel($: Engine, els: Elements, rows: number) {
     frontRow(els, row, { lead, leadColor, dim, isOpen: open === row.id, isGitOpen: gitRow?.id === row.id }, rowActions(row))
   const numberOf = (row: PanelRow) => row.number
   const repos = repoParts(panel)
+  const mainOf = (repo: string | null) => (panel.mains ?? []).find(one => one.repo === repo)
   const body =
     repos.length === 0
-      ? sections(els, panel, numberOf, draw, true)
+      ? [mainLine(els, mainOf(null)), ...sections(els, panel, numberOf, draw, true)]
       : repos.map(({ group, part }, index) => (
           <Box key={`repo:${group.label}`} flexDirection="column" marginTop={index === 0 ? 0 : 1}>
             <Text bold color={group.color}>{group.label}</Text>
+            {mainLine(els, mainOf(group.label))}
             <Box flexDirection="column" paddingLeft={2}>
               {sections(els, part, numberOf, draw, false)}
             </Box>

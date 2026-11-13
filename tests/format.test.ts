@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { age, assignNumbers, drillDown, frontLine, gitView, repoGroups, summaryLine, toView, waitingHeader } from '../src/format'
+import { age, assignNumbers, drillDown, frontLine, gitView, mainWords, repoGroups, summaryLine, toView, waitingHeader } from '../src/format'
+import type { MainLine } from '../src/mainline'
 import type { GitInfo } from '../src/git'
 import type { Front, FrontSession } from '../src/fronts'
 import type { Report, Waiting } from '../src/report'
@@ -135,11 +136,11 @@ test('every row carries its git view and the folder to open', async () => {
 const OPEN_PR = { number: 128, state: 'OPEN', checks: 'pass', reviewDecision: null } as const
 
 test('the summary says in words where the branch and its PR stand', async () => {
-  expect(summaryLine(OPEN_PR, GIT, true)).toBe('PR #128 · CI ok · 4 commits ahead · 3 behind main · 2 uncommitted')
+  expect(summaryLine(OPEN_PR, GIT, true)).toBe('PR #128 · CI ok · 4 ahead, 3 behind origin/main · 2 uncommitted')
 })
 
 test('a far behind base asks for a rebase', async () => {
-  expect(summaryLine(null, { ...GIT, behind: 41, dirty: 0 }, true)).toBe('4 commits ahead · 41 behind main (rebase soon)')
+  expect(summaryLine(null, { ...GIT, behind: 41, dirty: 0 }, true)).toBe('4 ahead, 41 behind origin/main (rebase soon)')
 })
 
 test('a session on main with nothing pending says so, and an unreported one too', async () => {
@@ -187,7 +188,7 @@ test('the waiting header counts the stuck rows when there are any', async () => 
 })
 
 test('the summary names the branch first when the front is named by its topic', async () => {
-  expect(summaryLine(null, { ...GIT, dirty: 0 }, true, 'feat/search')).toBe('branch feat/search · 4 commits ahead · 3 behind main')
+  expect(summaryLine(null, { ...GIT, dirty: 0 }, true, 'feat/search')).toBe('branch feat/search · 4 ahead, 3 behind origin/main')
 })
 
 const inRepo = (id: string, repoRoot: string, cwd = repoRoot): Front => {
@@ -240,4 +241,42 @@ test('a session on main with commits not pushed says so instead of no changes', 
   expect(summaryLine(null, shared, true)).toBe('4 commits not pushed')
   expect(summaryLine(null, { ...shared, unpushed: 1, dirty: 2 }, true)).toBe('1 commit not pushed · 2 uncommitted')
   expect(summaryLine(null, { ...shared, unpushed: 0 }, true)).toBe('no changes')
+})
+
+const MAIN_CHECKOUT = { path: '/repo', head: 'main', mainCheckout: true }
+
+test('a session on main in the main checkout says so, measured against origin/main', async () => {
+  const onMain: GitInfo = { base: 'origin/main', ahead: 2, behind: 5, dirty: 1, files: [], shared: true, unpushed: 2, where: MAIN_CHECKOUT }
+  expect(summaryLine(null, onMain, true)).toBe('main checkout, on main · 2 commits not pushed · 5 behind origin/main · 1 uncommitted')
+  expect(summaryLine(null, { ...onMain, ahead: 0, behind: 0, unpushed: 0, dirty: 0 }, true)).toBe('main checkout, on main · even with origin/main')
+  expect(summaryLine(null, { ...onMain, ahead: 2, behind: 0, dirty: 0 }, true)).toBe('main checkout, on main · 2 commits not pushed')
+})
+
+test('a main with no upstream still counts its commits over origin/main', async () => {
+  const noUpstream: GitInfo = { base: 'origin/main', ahead: 3, behind: 0, dirty: 0, files: [], shared: true, unpushed: 0, where: MAIN_CHECKOUT }
+  expect(summaryLine(null, noUpstream, true)).toBe('main checkout, on main · 3 commits ahead of origin/main')
+})
+
+test('a linked worktree is named by its folder', async () => {
+  const where = { path: '/repo/.worktrees/rate-limit', head: 'feat/rate-limit', mainCheckout: false }
+  expect(summaryLine(null, { ...GIT, dirty: 0, shared: false, where }, true)).toBe('worktree rate-limit · 4 ahead, 3 behind origin/main')
+  expect(summaryLine(null, { ...GIT, ahead: 0, behind: 0, dirty: 0, shared: false, where: { ...where, mainCheckout: true } }, true)).toBe('main checkout · even with origin/main')
+})
+
+const MAIN: MainLine = { base: 'origin/main', local: 'main', hasLocal: true, ahead: 0, behind: 0, fetchedAt: NOW - 120_000, fetchFailed: false }
+
+test('a repository\'s local main reads against origin/main, with when it was fetched', async () => {
+  expect(mainWords(MAIN, NOW)).toBe('local main even with origin/main · fetched 2m ago')
+  expect(mainWords({ ...MAIN, behind: 7 }, NOW)).toBe('local main 7 behind origin/main · fetched 2m ago')
+  expect(mainWords({ ...MAIN, ahead: 1 }, NOW)).toBe('local main 1 ahead of origin/main (not pushed) · fetched 2m ago')
+  expect(mainWords({ ...MAIN, ahead: 1, behind: 2, fetchedAt: null }, NOW)).toBe('local main 1 ahead, 2 behind origin/main')
+  expect(mainWords({ ...MAIN, hasLocal: false }, NOW)).toBe('no local main branch · fetched 2m ago')
+  expect(mainWords({ ...MAIN, fetchFailed: true }, NOW)).toBe('local main even with origin/main · fetch failing, last 2m ago')
+})
+
+test('the view carries each repository\'s main line, flagged when far behind', async () => {
+  const one = front(null)
+  const view = toView([one], NOW, { mainLines: { [one.repoRoot ?? '']: { ...MAIN, behind: 30 } } })
+  expect(view.mains).toEqual([{ repo: null, text: 'local main 30 behind origin/main · fetched 2m ago', warn: true }])
+  expect(toView([one], NOW).mains).toEqual([])
 })

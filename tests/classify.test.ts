@@ -2,7 +2,7 @@ import { expect, mock, test, type MockClock, type TestBody } from 'claude-code/t
 
 import type { OpEventResult } from 'claude-code'
 
-import { buildClassifyPrompt, fallbackClassification, parseClassification } from '../src/classify'
+import { buildClassifyPrompt, fallbackClassification, parseClassification, stableTopic } from '../src/classify'
 import { parseReport, type Report } from '../src/report'
 
 type TestOn = Parameters<TestBody>[1]
@@ -158,6 +158,33 @@ test('the classification carries a short topic of the work', async () => {
 
 test('the prompt hands the current topic to keep it stable', async () => {
   expect(buildClassifyPrompt('hola', 'Panel de sesiones').includes('Panel de sesiones')).toBe(true)
+})
+
+test('the prompt hands what the session was opened for, so the topic names the session and not the step', async () => {
+  const prompt = buildClassifyPrompt('Revisé el PR #4002: 3 hallazgos.', 'Pagos', {
+    firstPrompt: 'revisá los PRs abiertos del módulo de pagos',
+    claudeTitle: 'Payments PR reviews',
+    branch: 'main',
+  })
+  expect(prompt.includes('First thing the user asked: revisá los PRs abiertos del módulo de pagos')).toBe(true)
+  expect(prompt.includes('Conversation title: Payments PR reviews')).toBe(true)
+  expect(prompt.includes('Git branch: main')).toBe(true)
+  expect(prompt.includes('what the whole session is about')).toBe(true)
+  expect(prompt.includes('no PR, issue or ticket numbers')).toBe(true)
+  expect(prompt.indexOf('Session context:')).toBeLessThan(prompt.indexOf('The message:'))
+})
+
+test('no session context leaves the prompt without the block', async () => {
+  expect(buildClassifyPrompt('hola').includes('Session context:')).toBe(false)
+})
+
+test('a name is not swapped for one that only names a PR or issue of the moment', async () => {
+  expect(stableTopic('Revisión de PRs de pagos', 'Revisión PR #4002')).toBe('Revisión de PRs de pagos')
+  expect(stableTopic('Hallazgos de auditoría', 'Revisión y hallazgos #563')).toBe('Hallazgos de auditoría')
+  expect(stableTopic('Search cache', 'Search cache invalidation')).toBe('Search cache invalidation')
+  expect(stableTopic('', 'Revisión PR #4002')).toBe('Revisión PR #4002')
+  expect(stableTopic('Revisión PR #4002', 'Revisión de PRs de pagos')).toBe('Revisión de PRs de pagos')
+  expect(stableTopic('Search cache', '')).toBe('Search cache')
 })
 
 test('a long fallback is cut at the last whole word', async () => {

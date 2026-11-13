@@ -26,6 +26,8 @@ export type PanelGit = {
   dirtyFiles: string[]
   // On a shared branch: commits its upstream does not have yet.
   unpushed: number
+  // The session is on a shared branch (main): `base` is still origin's main.
+  shared: boolean
 }
 
 // The repository a row belongs to, when the panel shows more than one: its
@@ -57,7 +59,13 @@ export type PanelRow = {
   canClose: boolean
 }
 
-export type PanelView = { waiting: PanelRow[]; running: PanelRow[]; idle: PanelRow[]; closed: PanelRow[] }
+export type PanelSections = { waiting: PanelRow[]; running: PanelRow[]; idle: PanelRow[]; closed: PanelRow[] }
+
+// A repository's local main against origin's, in words; `repo` is its header's
+// label, null on a panel of one repository. `warn`: far behind or not fetching.
+export type PanelMain = { repo: string | null; text: string; warn: boolean }
+
+export type PanelView = PanelSections & { mains: PanelMain[] }
 
 export type Selected = string | null
 

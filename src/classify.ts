@@ -13,8 +13,17 @@ export type Classification = {
   question: string
   options: string[]
   recap: string
-  // What the session works on, in 3 to 6 words: its name on the panel.
+  // What the session as a whole is about, in 2 to 5 words: its name on the panel.
   topic: string
+}
+
+// What the session was opened for, so its name says that and not the turn's step.
+export type SessionContext = {
+  // The first line of the user's first prompt.
+  firstPrompt?: string | null
+  // The title Claude Code gave the conversation.
+  claudeTitle?: string | null
+  branch?: string | null
 }
 
 const MESSAGE_MAX = 6_000
@@ -37,14 +46,37 @@ why: at most 80 characters, in the message's language, what the user must do.
 question: the question as the message asks it ("" for none).
 options: the literal options it offers, or [].
 recap: at most 160 characters, what it did just before.
-topic: 3 to 6 words, in the message's language, naming the work the session is on ("Search cache", "Desktop toast fix"). Keep the current topic unless the work clearly changed.
+topic: 2 to 5 words, in the message's language, naming what the whole session is about: its goal or the area it works on, the thing that stays true from turn to turn ("Search cache", "Desktop toast fix", "Checkout PR reviews"). Draw it from the session context below more than from this one message, which is only the latest step. Never the step of the moment: no PR, issue or ticket numbers, no "review", "findings", "fixes", "next steps" or "status" naming one turn ("Revisión PR #4002", "Revisión y hallazgos #563" are wrong; "Revisión de PRs de pagos" is right). Keep the current topic unless the session's goal changed; replace it when it names a single step, PR, issue or number instead of the goal.
 
 The message:
 `
 
-export function buildClassifyPrompt(lastAssistant: string, currentTopic = ''): string {
+const CONTEXT_MAX = 300
+
+function contextLines(context: SessionContext): string {
+  const line = (label: string, value: string | null | undefined) => (value && value.trim() !== '' ? [`${label}: ${value.trim().slice(0, CONTEXT_MAX)}`] : [])
+  const lines = [
+    ...line('First thing the user asked', context.firstPrompt),
+    ...line('Conversation title', context.claudeTitle),
+    ...line('Git branch', context.branch),
+  ]
+  return lines.length === 0 ? '' : `Session context:\n${lines.join('\n')}\n\n`
+}
+
+export function buildClassifyPrompt(lastAssistant: string, currentTopic = '', context: SessionContext = {}): string {
   const topic = currentTopic === '' ? 'Current topic: none yet.\n\n' : `Current topic: ${currentTopic}\n\n`
-  return INSTRUCTIONS.replace('The message:\n', `${topic}The message:\n`) + lastAssistant.slice(0, MESSAGE_MAX)
+  return INSTRUCTIONS.replace('The message:\n', `${contextLines(context)}${topic}The message:\n`) + lastAssistant.slice(0, MESSAGE_MAX)
+}
+
+// A name made of one step's reference: "PR #4002", "#563", "issue 12".
+const MOMENT = /#\d+|\b(PR|MR|issue|ticket)\s*#?\d+/i
+
+// The topic to keep: the model's, unless it would swap a name for one that
+// only names the step of the moment. A first topic is taken as it comes.
+export function stableTopic(current: string, proposed: string): string {
+  if (proposed === '') return current
+  if (current !== '' && MOMENT.test(proposed) && !MOMENT.test(current)) return current
+  return proposed
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -80,11 +112,11 @@ export function fallbackClassification(lastAssistant: string): Classification {
   return { kind: 'review', why, question: why, options: [], recap: '', topic: '' }
 }
 
-export async function classifyTurn($: Engine, lastAssistant: string, currentTopic = ''): Promise<Classification> {
+export async function classifyTurn($: Engine, lastAssistant: string, currentTopic = '', context: SessionContext = {}): Promise<Classification> {
   try {
     const reply = await $.model.complete({
       model: MODEL,
-      prompt: buildClassifyPrompt(lastAssistant, currentTopic),
+      prompt: buildClassifyPrompt(lastAssistant, currentTopic, context),
       timeoutMs: TIMEOUT_MS,
     })
     if (!reply.isAnswered) return fallbackClassification(lastAssistant)

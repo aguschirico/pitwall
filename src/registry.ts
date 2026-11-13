@@ -1,7 +1,7 @@
 // Reads what the machine knows about its sessions: the registry Claude Code
 // keeps of live sessions, the reports the reporter writes, and, for a session
 // without a report, the tail of its transcript.
-import type { Hook } from 'claude-code'
+import type { Hook, ProcessRunInit } from 'claude-code'
 
 import { fallbackClassification } from './classify'
 import { cutMessage, parseReport, reportDir, type Report } from './report'
@@ -12,7 +12,7 @@ type Engine = Parameters<Hook<'session.start'>>[0]
 export type Io = {
   list: (path: string) => Promise<{ name: string }[]>
   read: (path: string) => Promise<string>
-  run: (argv: readonly string[], init?: { cwd?: string }) => Promise<{ exitCode: number; stdout: string }>
+  run: (argv: readonly string[], init?: ProcessRunInit) => Promise<{ exitCode: number; stdout: string }>
 }
 
 export function ioFrom($: Engine): Io {

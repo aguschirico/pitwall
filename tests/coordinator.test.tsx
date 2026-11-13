@@ -83,6 +83,7 @@ function processAnswer(world: World, argv: readonly string[]): Ran {
   if (argv[0] === 'gh') return world.gh[argv[3] ?? ''] !== undefined ? ran(world.gh[argv[3] ?? ''] ?? '') : ran('', 1)
   if (argv[0] === 'git' && argv.includes('symbolic-ref')) return ran('origin/main\n')
   if (argv[0] === 'git' && argv.includes('rev-list')) return ran('3\t4\n')
+  if (argv[0] === 'git' && argv.includes('--show-toplevel')) return ran('/repo/.worktrees/docs\n/repo/.git/worktrees/docs\n/repo/.git\nfeat/docs\n')
   if (argv[0] === 'git' && argv.includes('--numstat')) return ran('182\t20\tserver/src/mcp/tools.ts\n')
   if (argv[0] === 'git' && argv.includes('status')) return ran(' M a.ts\n')
   if (argv[0] === 'git' && argv.includes('log')) return ran('34f68cd\tfix(f4): keep code spans out\n')
@@ -532,7 +533,17 @@ test('each front shows where its branch stands against main', async ($, on) => {
   await clock.settle()
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
-  expect(await ui.find({ type: 'Text', text: /4 commits ahead · 3 behind main · 1 uncommitted/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /worktree docs · .*4 ahead, 3 behind origin\/main · 1 uncommitted/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the repository shows its local main against origin/main, fetched by the panel', async ($, on) => {
+  const clock = engine(on, world())
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect(await ui.find({ type: 'Text', text: /^local main 3 ahead, 4 behind origin\/main · fetched now$/ })).toBeDefined()
   await ui.unmount()
 })
 

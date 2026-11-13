@@ -1,8 +1,9 @@
 // The words the panel draws for a front. Pure, so the copy is tested apart
 // from any surface.
-import type { PanelDrill, PanelGit, PanelGroup, PanelRow, PanelView } from '../types'
+import type { PanelDrill, PanelGit, PanelGroup, PanelMain, PanelRow, PanelSections, PanelView } from '../types'
 import type { Front, FrontSession } from './fronts'
-import type { GitInfo } from './git'
+import { isShared, type GitInfo } from './git'
+import type { MainLine } from './mainline'
 import type { PrChip } from './pr'
 import type { WaitKind } from './report'
 import { DEFAULT_STUCK_MIN } from './settings'
@@ -61,26 +62,68 @@ function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? '' : 's'}`
 }
 
-function gitWords(git: GitInfo): string[] {
-  const dirty = git.dirty > 0 ? [`${git.dirty} uncommitted`] : []
-  if (git.base === null) {
-    const unpushed = (git.unpushed ?? 0) > 0 ? [`${plural(git.unpushed ?? 0, 'commit')} not pushed`] : []
-    const parts = [...unpushed, ...dirty]
-    return parts.length > 0 ? parts : ['no changes']
-  }
-  const own = git.ahead > 0 ? `${plural(git.ahead, 'commit')} ahead` : 'no commits ahead'
-  const base = git.base.replace(/^origin\//, '')
-  const rebase = git.behind > BEHIND_WARN ? ' (rebase soon)' : ''
-  const behind = git.behind > 0 ? [`${git.behind} behind ${base}${rebase}`] : []
-  return [own, ...behind, ...dirty]
+const lastPart = (path: string): string => path.split('/').filter(Boolean).pop() ?? path
+
+// The working tree the session is in: the repo's main checkout or a linked
+// worktree by its folder name, and its branch when it is a shared one.
+export function whereWords(git: GitInfo): string[] {
+  const where = git.where
+  if (!where) return []
+  const place = where.mainCheckout ? 'main checkout' : `worktree ${lastPart(where.path)}`
+  if (!isShared(git)) return [place]
+  return [where.head === 'HEAD' ? `${place}, detached` : `${place}, on ${where.head}`]
 }
 
-// The second line of a row: where the branch and its PR stand, in words.
-// `branch` leads when the row is named by its topic, so the branch is still seen.
+// How far a branch is from origin's main. `skipAhead`: the commits ahead are
+// already told as not pushed.
+function relation(ahead: number, behind: number, base: string, skipAhead: boolean): string | null {
+  const rebase = behind > BEHIND_WARN ? ' (rebase soon)' : ''
+  const own = skipAhead ? 0 : ahead
+  if (own > 0 && behind > 0) return `${own} ahead, ${behind} behind ${base}${rebase}`
+  if (own > 0) return `${plural(own, 'commit')} ahead of ${base}`
+  if (behind > 0) return `${behind} behind ${base}${rebase}`
+  return skipAhead && ahead > 0 ? null : `even with ${base}`
+}
+
+function gitWords(git: GitInfo): string[] {
+  const dirty = git.dirty > 0 ? [`${git.dirty} uncommitted`] : []
+  const unpushed = git.unpushed ?? 0
+  const notPushed = isShared(git) && unpushed > 0 ? [`${plural(unpushed, 'commit')} not pushed`] : []
+  if (git.base === null) {
+    const parts = [...notPushed, ...dirty]
+    return parts.length > 0 ? parts : ['no changes']
+  }
+  // A session on main itself: its commits over origin's main are the unpushed ones.
+  const onBase = isShared(git) && git.where?.head === git.base.replace(/^[^/]+\//, '')
+  const against = relation(git.ahead, git.behind, git.base, onBase && unpushed > 0)
+  return [...notPushed, ...(against === null ? [] : [against]), ...dirty]
+}
+
+// The second line of a row: which worktree, and where its branch and PR stand, in words.
+// `branch` follows when the row is named by its topic, so the branch is still seen.
 export function summaryLine(pr: PrChip | null, git: GitInfo | null, reported: boolean, branch: string | null = null): string {
   const lead = branch ? [`branch ${branch}`] : []
-  const parts = [...lead, ...(pr ? prWords(pr) : []), ...(git ? gitWords(git) : []), ...(reported ? [] : ['no report'])]
+  const where = git ? whereWords(git) : []
+  const parts = [...where, ...lead, ...(pr ? prWords(pr) : []), ...(git ? gitWords(git) : []), ...(reported ? [] : ['no report'])]
   return parts.join(' · ')
+}
+
+// A repository's local main against origin's: "local main 3 behind origin/main".
+export function mainWords(main: MainLine, now: number): string {
+  const name = `local ${main.local}`
+  const state = !main.hasLocal
+    ? `no ${name} branch`
+    : main.ahead > 0 && main.behind > 0
+      ? `${name} ${main.ahead} ahead, ${main.behind} behind ${main.base}`
+      : main.ahead > 0
+        ? `${name} ${main.ahead} ahead of ${main.base} (not pushed)`
+        : main.behind > 0
+          ? `${name} ${main.behind} behind ${main.base}`
+          : `${name} even with ${main.base}`
+  const fetched = main.fetchFailed
+    ? main.fetchedAt === null ? 'could not fetch origin' : `fetch failing, last ${age(now - main.fetchedAt)} ago`
+    : main.fetchedAt === null ? null : `fetched ${now - main.fetchedAt < MINUTE ? 'now' : `${age(now - main.fetchedAt)} ago`}`
+  return fetched === null ? state : `${state} · ${fetched}`
 }
 
 export type Drill = PanelDrill
@@ -115,6 +158,7 @@ export function gitView(info: GitInfo | null): PanelGit | null {
   const sum = (key: 'added' | 'removed') => info.files.reduce((total, file) => total + file[key], 0)
   return {
     chip: info.base === null ? null : `↑${info.ahead} ↓${info.behind}`,
+    shared: isShared(info),
     warn: info.behind > BEHIND_WARN,
     dirty: info.dirty,
     base: info.base,
@@ -145,7 +189,13 @@ function speaker(front: Front): FrontSession | undefined {
 
 // `pr` and `git` are keyed by front id; a front without one gets none.
 // `stuckAfter` is frontLine's, the user's threshold.
-export type ViewExtras = { pr?: Record<string, PrChip | null>; git?: Record<string, GitInfo | null>; stuckAfter?: number | null }
+// `mainLines` is keyed by repository (its main working tree).
+export type ViewExtras = {
+  pr?: Record<string, PrChip | null>
+  git?: Record<string, GitInfo | null>
+  mainLines?: Record<string, MainLine | null>
+  stuckAfter?: number | null
+}
 
 // The branch, when the row's name is not already it (a topic or a rename).
 function ownBranchShown(front: Front): string | null {
@@ -170,8 +220,6 @@ export function repoKey(front: Front): string {
 // Header colors, none of them the sections' own (warning, success).
 const GROUP_COLORS = ['claude', 'permission', 'suggestion', 'planMode', 'autoAccept', 'ide', 'merged', 'remember']
 
-const lastPart = (path: string): string => path.split('/').filter(Boolean).pop() ?? path
-
 // Each repository's header: its folder name, or its last two folders where two
 // share a name. Colors follow the labels' order, so a repo keeps its color
 // while the same repos are open. One repository on the panel needs no headers.
@@ -194,7 +242,7 @@ function byRepo(rows: PanelRow[]): PanelRow[] {
   return [...rows].sort((a, b) => (a.group?.label ?? '').localeCompare(b.group?.label ?? ''))
 }
 
-export type RepoPart = { group: PanelGroup; part: PanelView }
+export type RepoPart = { group: PanelGroup; part: PanelSections }
 
 // The panel split by repository, the repos in alphabetical order (the order
 // toView already sorted each section in), or [] for a single one.
@@ -217,7 +265,7 @@ export function repoParts(panel: PanelView): RepoPart[] {
 
 // Every row in the order the pane draws it.
 export function drawnRows(panel: PanelView): PanelRow[] {
-  const all = (part: PanelView) => [...part.waiting, ...part.running, ...part.idle, ...part.closed]
+  const all = (part: PanelSections) => [...part.waiting, ...part.running, ...part.idle, ...part.closed]
   const parts = repoParts(panel)
   return parts.length === 0 ? all(panel) : parts.flatMap(one => all(one.part))
 }
@@ -249,7 +297,21 @@ export function assignNumbers(previous: Record<string, number>, rows: PanelRow[]
 
 export function withNumbers(panel: PanelView, numbers: Record<string, number>): PanelView {
   const number = (row: PanelRow): PanelRow => ({ ...row, number: numbers[row.id] ?? 0 })
-  return { waiting: panel.waiting.map(number), running: panel.running.map(number), idle: panel.idle.map(number), closed: panel.closed.map(number) }
+  return { ...panel, waiting: panel.waiting.map(number), running: panel.running.map(number), idle: panel.idle.map(number), closed: panel.closed.map(number) }
+}
+
+// Each repository's main line, in the order its header is drawn; `repo` is
+// null on a panel of one repository, which draws no headers.
+function mainsOf(fronts: Front[], groups: Map<string, PanelGroup>, lines: Record<string, MainLine | null>, now: number): PanelMain[] {
+  const keys = [...new Set(fronts.map(repoKey))]
+  return keys
+    .flatMap(key => {
+      const main = lines[key]
+      if (!main) return []
+      const behind = main.behind > BEHIND_WARN
+      return [{ repo: groups.get(key)?.label ?? null, text: mainWords(main, now), warn: behind || main.fetchFailed }]
+    })
+    .sort((a, b) => (a.repo ?? '').localeCompare(b.repo ?? ''))
 }
 
 export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): PanelView {
@@ -281,6 +343,7 @@ export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): P
   const waitsOnPr = (one: { front: Front; row: PanelRow }) => one.front.section !== 'waiting' && one.row.tag === 'PR'
   const of = (section: Front['section']) => rows.filter(one => one.front.section === section && !waitsOnPr(one)).map(one => one.row)
   return {
+    mains: mainsOf(fronts, groups, extras.mainLines ?? {}, now),
     waiting: byRepo([...of('waiting'), ...rows.filter(waitsOnPr).map(one => one.row)]),
     running: byRepo(of('running')),
     idle: byRepo(of('idle')),

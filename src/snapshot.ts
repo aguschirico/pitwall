@@ -9,6 +9,7 @@ import type { Hook } from 'claude-code'
 
 import { buildFronts, CLOSED_KEEP_MS, type Front } from './fronts'
 import { fetchGit, type GitInfo } from './git'
+import { repoMainLine, type FetchRecord, type MainLine } from './mainline'
 import { dismissFronts, readOverrides } from './overrides'
 import { branchGone, fetchPr, type PrChip } from './pr'
 import { inferReport, parseLive, readLiveSessions, readReports, type Io, type LiveSession } from './registry'
@@ -29,6 +30,10 @@ export type Snapshot = {
   // When each front's PR chip was fetched; a snapshot written before this has none.
   prAt: Record<string, number>
   git: Record<string, GitInfo | null>
+  // Each repository's local main against origin's, keyed by its main working
+  // tree, and when the panel last fetched origin's main there.
+  mainLines: Record<string, MainLine | null>
+  fetches: Record<string, FetchRecord>
 }
 
 export function snapshotPath(claudeHome: string): string {
@@ -69,6 +74,8 @@ export function parseSnapshot(text: string): Snapshot | null {
     pr: recordOf<PrChip | null>(field(data, 'pr')),
     prAt: Object.fromEntries(Object.entries(recordOf<unknown>(field(data, 'prAt'))).filter((entry): entry is [string, number] => typeof entry[1] === 'number')),
     git: recordOf<GitInfo | null>(field(data, 'git')),
+    mainLines: recordOf<MainLine | null>(field(data, 'mainLines')),
+    fetches: recordOf<FetchRecord>(field(data, 'fetches')),
   }
 }
 
@@ -123,10 +130,23 @@ async function sessionsNow(io: Io, claudeHome: string, now: number) {
   return { live, reports, inferred }
 }
 
-// `previous` is the last snapshot read, stale or not: it lends recent PR chips.
+// Every repository on the panel, its origin main fetched first when due, so
+// the rows measured against it next see the fresh one.
+async function mainLinesOf(io: Io, fronts: Front[], previous: Snapshot | null, now: number) {
+  const roots = [...new Set(fronts.flatMap(front => (front.repoRoot === null ? [] : [front.repoRoot])))]
+  const read = await Promise.all(roots.map(async root => ({ root, ...(await repoMainLine(io, root, previous?.fetches[root], now)) })))
+  return {
+    mainLines: Object.fromEntries(read.map(one => [one.root, one.main])),
+    fetches: Object.fromEntries(read.flatMap(one => (one.fetch === null ? [] : [[one.root, one.fetch]]))),
+  }
+}
+
+// `previous` is the last snapshot read, stale or not: it lends recent PR chips
+// and when each repository was last fetched.
 export async function computeSnapshot($: Engine, io: Io, claudeHome: string, now: number, previous: Snapshot | null = null): Promise<Snapshot> {
   const { live, reports, inferred } = await sessionsNow(io, claudeHome, now)
   const fronts = buildFronts({ reports, inferred, live, overrides: await readOverrides($), now })
+  const { mainLines, fetches } = await mainLinesOf(io, fronts, previous, now)
   const judged = await Promise.all(
     fronts.map(async front => {
       const { pr, at } = await prFor(io, front, previous, now)
@@ -144,6 +164,8 @@ export async function computeSnapshot($: Engine, io: Io, claudeHome: string, now
     pr: Object.fromEntries(judged.map(one => [one.front.id, one.pr])),
     prAt: Object.fromEntries(judged.flatMap(one => (one.prAt === null ? [] : [[one.front.id, one.prAt]]))),
     git: Object.fromEntries(judged.map(one => [one.front.id, one.git])),
+    mainLines,
+    fetches,
   }
   await $.fs.write(snapshotPath(claudeHome), JSON.stringify(snapshot))
   return snapshot

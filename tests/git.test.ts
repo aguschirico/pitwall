@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { fetchGit, parseAheadBehind, parseCommits, parseNumstat, countDirty, dirtyPaths } from '../src/git'
+import { fetchGit, parseAheadBehind, parseCommits, parseNumstat, parseWorktree, countDirty, dirtyPaths } from '../src/git'
 import type { Io } from '../src/registry'
 
 type Ran = { exitCode: number; stdout: string }
@@ -57,14 +57,27 @@ test('a worktree on its own branch reports ahead, behind, files and dirty agains
     files: [{ path: 'server/src/mcp/tools.ts', added: 182, removed: 20 }],
     commits: [{ hash: '34f68cd', subject: 'fix(f4): keep code spans out' }],
     dirtyFiles: ['a.ts'],
+    shared: false,
+    where: null,
   })
   expect(fake.calls.every(call => call.at(-1) === '@/repo/search')).toBe(true)
 })
 
-test('a session on the shared branch with nothing over its upstream reports only its dirty files', async () => {
-  const fake = io(argv => (argv.includes('@{upstream}..HEAD') ? ok(argv.includes('rev-list') ? '0\n' : '') : ANSWERS(argv)))
+test('a session on the shared branch is still measured against origin, and against its upstream', async () => {
+  const fake = io(argv => (argv.includes('@{upstream}..HEAD') ? ok('0\n') : ANSWERS(argv)))
   const info = await fetchGit(fake, '/repo', false)
-  expect(info).toEqual({ base: null, ahead: 0, behind: 0, dirty: 1, files: [], commits: [], dirtyFiles: ['a.ts'], unpushed: 0 })
+  expect(info).toEqual({
+    base: 'origin/main',
+    ahead: 4,
+    behind: 3,
+    dirty: 1,
+    files: [{ path: 'server/src/mcp/tools.ts', added: 182, removed: 20 }],
+    commits: [{ hash: '34f68cd', subject: 'fix(f4): keep code spans out' }],
+    dirtyFiles: ['a.ts'],
+    shared: true,
+    where: null,
+    unpushed: 0,
+  })
 })
 
 test('a repo with no origin compares against its local main', async () => {
@@ -91,20 +104,26 @@ test('a session on the shared main line counts the commits its upstream does not
   const fake = io(argv => {
     if (argv.includes('status')) return ok('')
     if (argv.includes('rev-list') && argv.includes('@{upstream}..HEAD')) return ok('4\n')
-    if (argv.includes('log') && argv.includes('@{upstream}..HEAD')) return ok('34f68cd\tfeat: send invoices\n')
     return fail
   })
   const info = await fetchGit(fake, '/repo', false)
-  expect(info).toEqual({
-    base: null,
-    ahead: 0,
-    behind: 0,
-    dirty: 0,
-    files: [],
-    dirtyFiles: [],
-    unpushed: 4,
-    commits: [{ hash: '34f68cd', subject: 'feat: send invoices' }],
+  expect(info?.unpushed).toBe(4)
+  expect(info?.shared).toBe(true)
+})
+
+test('rev-parse tells the main checkout from a linked worktree', async () => {
+  expect(parseWorktree('/repo\n/repo/.git\n/repo/.git\nmain\n')).toEqual({ path: '/repo', head: 'main', mainCheckout: true })
+  expect(parseWorktree('/repo/.worktrees/x\n/repo/.git/worktrees/x\n/repo/.git\nfeat/x\n')).toEqual({
+    path: '/repo/.worktrees/x',
+    head: 'feat/x',
+    mainCheckout: false,
   })
+  expect(parseWorktree('')).toBe(null)
+})
+
+test('the worktree a session runs in is read in its own folder', async () => {
+  const fake = io(argv => (argv.includes('--show-toplevel') ? ok('/repo/.worktrees/x\n/repo/.git/worktrees/x\n/repo/.git\nfeat/x\n') : ANSWERS(argv)))
+  expect((await fetchGit(fake, '/repo/.worktrees/x', true))?.where).toEqual({ path: '/repo/.worktrees/x', head: 'feat/x', mainCheckout: false })
 })
 
 test('a shared branch with no upstream has nothing unpushed', async () => {

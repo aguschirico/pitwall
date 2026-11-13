@@ -4,7 +4,7 @@
 import type { Hook, On } from 'claude-code'
 
 import { PASTE_BLOCK } from './fronts'
-import { classifyTurn, fallbackClassification, type Classification } from './classify'
+import { classifyTurn, fallbackClassification, stableTopic, type Classification } from './classify'
 import { isCoordinating } from './coordinator'
 import { mayRename, renameSession } from './naming'
 import { claudeHomeOf } from './paths'
@@ -228,10 +228,12 @@ async function reportTurnEnd($: Engine, answer: string, isAnswered: boolean): Pr
   }
   await saveReport($, { ...location, ...toPatch(fallbackClassification(answer), false) })
   $.clock.after(0, () => {
-    void classifyTurn($, answer, current?.topic ?? '').then(async found => {
+    const context = { firstPrompt: current?.title ?? null, claudeTitle: current?.aiTitle ?? null, branch: current?.branch ?? null }
+    const topicNow = current?.topic ?? ''
+    void classifyTurn($, answer, topicNow, context).then(async found => {
       if (turn !== turnSeq) return
       await saveReport($, toPatch(found, true))
-      await adoptTopic($, found.topic)
+      await adoptTopic($, stableTopic(current?.topic ?? topicNow, found.topic))
     })
   })
 }

@@ -78,7 +78,7 @@ async function refreshOnce($: Engine): Promise<void> {
     now,
     closedWindowMs: closedWindowMs(),
   })
-  const view = toView(lastFronts, now, { pr: snapshot.pr, git: snapshot.git, stuckAfter: stuckAfterMs() })
+  const view = toView(lastFronts, now, { pr: snapshot.pr, git: snapshot.git, mainLines: snapshot.mainLines, stuckAfter: stuckAfterMs() })
   rowNumbers = assignNumbers(rowNumbers, drawnRows(view))
   const panel = withNumbers(view, rowNumbers)
   await setView($, panel)

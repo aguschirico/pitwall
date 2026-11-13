@@ -14,22 +14,24 @@ to the chat of one session and keeps the latest picture of all the others.
 
 ```
 api
+local main 2 behind origin/main · fetched 3m ago
   Waiting on you · 2
   1 · Decision  Search cache  4m ago
-      branch feat/search · PR #128 · CI ok · 4 commits ahead · 3 behind main
+      worktree search · branch feat/search · PR #128 · CI ok · 4 ahead, 3 behind origin/main
       → pick between a Redis cache and an in-memory one
   2 · OK push  Desktop toasts  12m ago
       → 3 commits ready, wants your OK to push and open the PR
   Running · 1
   3 ● Docs refresh  now
-      Edit: src/content/getting-started.md
+      main checkout, on main · 1 commit not pushed
   Idle · 1
   4 ◌ Release notes  35m ago
   Closed · 1
   5 ○ feat/onboarding  2d ago
-      branch feat/onboarding · 2 commits ahead · 5 uncommitted
+      worktree onboarding · 2 ahead, 6 behind origin/main · 5 uncommitted
 
 blog
+local main even with origin/main · fetched 1m ago
   Waiting on you · 1
   6 · Review  Draft on terminal multiplexers  20m ago
       → first draft done, wants a read before the edit pass
@@ -50,8 +52,13 @@ blog
   the panel is just the four sections.
 - **Fronts, not sessions.** Sessions on the same repo and branch are one front, so picking a task up
   again in a new session keeps the same row. Sessions on `main` each get their own.
-- **Git at a glance**: commits over the main line, files changed, what is left uncommitted. A
-  session working on `main` itself shows the commits it has not pushed yet.
+- **Git at a glance**: each row says which worktree its session is in (`worktree search`, or
+  `main checkout`, with `on main` when it works on `main` itself), how far it is from
+  `origin/main`, and what is left uncommitted; **▸ Git** lists the commits and files. A session on
+  `main` also shows the commits it has not pushed yet. Under each repository's name, its local
+  `main` against `origin/main`. The panel fetches `origin/main` itself, at most every 5 minutes per
+  repository and never with a prompt (a fetch that would ask for a password or passphrase just
+  fails, and the line says so), so "behind" means behind what is on the remote now.
 - **Row buttons**, on a line under each row, open or closed: **↪ Go** brings that session's
   terminal tab to the front (Ghostty, iTerm2 and Terminal.app by tty; tmux, kitty and WezTerm
   through their remote control), so an OK push is one press away. **▸ Git** opens the branch below,
@@ -157,13 +164,16 @@ Two roles in one mod:
 - **Reporter**, in every session. It writes `~/.claude/pitwall/reports/<sessionId>.json` as the
   session moves: running, waiting on a permission dialog, finished a turn. When a turn ends, it marks
   the session as waiting right away and then asks a small model (Haiku) to classify the last message:
-  what kind of wait it is, the question, the options, a short recap and a topic. The topic also
-  renames the session, unless you named it yourself or another session already has that name
+  what kind of wait it is, the question, the options, a short recap and a topic. The topic names
+  what the whole session is about, not the step of the moment: the model also sees your first
+  prompt, Claude Code's title for the conversation and the branch, and a name is never swapped for
+  one that only names a PR or issue (`Revisión PR #4002`). The topic also renames the session, unless you named it yourself or another session already has that name
   (sessions message each other by name). The coordinator keeps its own name.
 - **Coordinator**, in the session where you ran `/panel`. Every 5 seconds (see Options) it reads the
   reports and Claude Code's own session registry, groups sessions into fronts, adds git and PR state,
   and draws the pane. When several sessions coordinate, whichever refreshes first writes a shared
-  snapshot and the others read it, so `git` runs once per tick, not once per panel. PR and CI state
+  snapshot and the others read it, so `git` runs once per tick, not once per panel, and
+  `git fetch origin main` once per repository every 5 minutes. PR and CI state
   is asked of GitHub at most once a minute per front, whatever the interval.
 
 Sessions without the mod still appear, inferred from the registry and the tail of their transcript,
