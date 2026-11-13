@@ -24,7 +24,8 @@ let current: Report | null = null
 let claudeHome: string | null = null
 let lastWrite = 0
 let turnSeq = 0
-// Whether this session runs settings hooks for plugins (see classic.PreToolUse).
+// Whether classic.PermissionRequest reaches this mod in this session: set the
+// first time it does (see tool.check).
 let classicHooksRun = false
 // A permission wait not shown yet. Auto mode's classifier answers most asks
 // in seconds, so a wait shows only once it lasts PERMISSION_GRACE_MS: a real
@@ -302,18 +303,14 @@ export function registerReporter(on: On): void {
     }
   })
 
-  // Settings hooks run in this session: PreToolUse fires before every call's
-  // check, so by the check below this says whether PermissionRequest will.
-  on('classic.PreToolUse', async ($, e, next) => {
-    classicHooksRun = true
-    return next(e)
-  })
-
-  // The fallback where settings hooks do not run (an organization's managed
-  // settings can turn them off for plugins): an ask a person may answer marks
-  // the wait. It cannot tell a dialog from auto mode's classifier, which
-  // allows the call and leaves the wait up while the command runs, so where
-  // PermissionRequest runs, only that marks one.
+  // The fallback until PermissionRequest is seen to reach this mod: where
+  // settings hooks do not run for plugins (an organization's managed settings
+  // can turn them off), or where a plugin of a tier above answers it first (a
+  // security plugin may), an ask a person may answer marks the wait. It cannot
+  // tell a dialog from auto mode's classifier, which allows the call and
+  // leaves the wait up while the command runs, so once PermissionRequest has
+  // run, only that marks one. No probe on classic.PreToolUse: a plugin above
+  // that sends it past this mod gets the user a skip notice for nothing.
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
     const asksPerson = verdict.decision === 'ask' && e.approver === 'person' && e.tool_use_id !== undefined
@@ -328,6 +325,7 @@ export function registerReporter(on: On): void {
   // can fire while the classifier still decides, hence the grace period. It
   // names no call: the main loop's newest one is the one asking.
   on('classic.PermissionRequest', async ($, e, next) => {
+    classicHooksRun = true
     if (e.agent_id === undefined) {
       await markPermission($, e.tool_name, e.tool_input, callsUnderWay[callsUnderWay.length - 1] ?? null)
     }

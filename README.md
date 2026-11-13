@@ -182,10 +182,30 @@ on is only a guess.
 
 The design notes are in [`docs/design.md`](docs/design.md).
 
+### Next to a security plugin
+
+An organization can install a managed plugin, often a security one, that runs ahead of every plugin
+you install and answers permission requests itself. Pitwall's `classic.PermissionRequest` hook
+then never runs, and Claude Code may say so:
+
+```
+pitwall: its classic.PermissionRequest hook was skipped. "<that plugin>" runs first and sent the event on past it.
+```
+
+Nothing is broken, and there is nothing to change on your side: pitwall cannot run before a
+managed plugin, and it is not meant to. Permission waits still show, from the permission check
+every tool call goes through. The one difference is in auto mode: that check cannot tell your
+dialog from auto mode's classifier, so a call the classifier takes longer than 8 seconds to allow
+can show as waiting for a permission until it starts running.
+
+Claude Code shows that line in the conversation only when pitwall is loaded from a folder it
+reloads as you edit (`claude --plugin-dir`, `CLAUDE_CODE_PLUGIN_DIRS`); installed from the
+marketplace, it goes to the debug log (`claude --debug`) alone.
+
 ## Development
 
 ```
-claude plugin test .       # 218 tests
+claude plugin test .       # 285 tests
 claude plugin validate .   # what the engine would accept
 claude --plugin-dir .      # try it without installing
 ```

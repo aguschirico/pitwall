@@ -113,12 +113,16 @@ test('a tool check a person will answer marks a manual wait', async ($, on) => {
   expect(seen.last()?.waiting?.why).toBe('Permission: Bash git push')
 })
 
-test('where settings hooks run, a tool check marks no wait: auto mode may allow it', async ($, on) => {
-  const seen = engine(on)
+test('once a permission request has reached the mod, a tool check marks no wait: auto mode may allow it', async ($, on) => {
+  const seen = engine(on, { clock: true })
   await $.session.start(START)
-  await $.tool.call({ tool: 'Bash', command: 'git commit -F msg.txt' })
-  await $.tool.check({ tool: 'Bash', input: { command: 'git commit -F msg.txt' }, tool_use_id: 'tu2', approver: 'person' })
+  await $.classic.PermissionRequest(ASK)
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await seen.clock?.advance(PERMISSION_GRACE_MS)
+  expect(seen.last()?.state).toBe('running')
 
+  await $.tool.check({ tool: 'Bash', input: { command: 'git commit -F msg.txt' }, tool_use_id: 'tu2', approver: 'person' })
+  await seen.clock?.advance(PERMISSION_GRACE_MS)
   expect(seen.last()?.state).toBe('running')
   expect(seen.last()?.waiting).toBe(null)
 })

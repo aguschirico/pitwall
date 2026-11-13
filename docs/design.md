@@ -160,6 +160,12 @@ few steps, the options it offered, and where and how to answer.
   a dialog the person has to answer is still open by then. A command the engine already draws as
   executing (its "run in background" pill) has its permission settled and is never shown waiting.
   A question to the person (AskUserQuestion, ExitPlanMode) shows at once.
+- **Where PermissionRequest does not reach the mod** (settings hooks off for plugins, or a managed
+  plugin of a tier above answering it first), `tool.check` marks the wait instead: an ask a person
+  would answer, after the same grace period. Until PermissionRequest has reached the mod once in the
+  session, that fallback is on; after, only PermissionRequest marks waits, since `tool.check`
+  cannot tell a dialog from auto mode's classifier. There is no probe on `classic.PreToolUse`: a
+  managed plugin that sends it past the mod got the user a skip notice for nothing (issue #1).
 - **Fallback** for sessions without a report: the registry's `idle` status plus the last assistant
   message in the transcript.
 - The model runs only when a turn ends. The "running" line comes from cheap data: title, last tool,
