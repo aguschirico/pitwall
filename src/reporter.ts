@@ -30,12 +30,18 @@ let classicHooksRun = false
 // A permission wait not shown yet. Auto mode's classifier answers most asks
 // in seconds, so a wait shows only once it lasts PERMISSION_GRACE_MS: a real
 // dialog is still open by then, a classified call has run or is running.
-type PendingPermission = { seq: number; callId: string | null; wait: Waiting }
+type PendingPermission = { seq: number; callId: string | null; agentId: string | null; wait: Waiting }
 let pending: PendingPermission | null = null
+// A subagent's permission wait on show: its call, and the main loop's own wait
+// it covered (a question at the end of a turn), brought back once it settles.
+type ShownAgentWait = { callId: string | null; agentId: string; covered: Waiting | null }
+let agentWait: ShownAgentWait | null = null
 let permissionSeq = 0
 // The main loop's calls under way, the newest last, and the ones the engine
 // already draws as executing (a Bash command's "run in background" pill).
 const callsUnderWay: string[] = []
+// Subagents' calls under way, by call id, each with its agent, newest last.
+const agentCallsUnderWay = new Map<string, string>()
 const callsExecuting = new Set<string>()
 // The last calls that finished: a wait for one of them is over.
 const callsFinished: string[] = []
@@ -45,6 +51,36 @@ const PERSON_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode'])
 export const PERMISSION_GRACE_MS = 8_000
 // The folder the session started in: its transcript lives under it, whatever the cwd is now.
 let startCwd: string | null = null
+// Subagent runs under way, by loop id, oldest first, with what each was given
+// to do. A background agent goes on after the main turn ends: while one does,
+// a main turn that ends asking nothing leaves the session running, not idle.
+const agentsRunning = new Map<string, string>()
+// What each agent was spawned to do (the Agent call's description), by loop id.
+const agentTasks = new Map<string, string>()
+const AGENT_TASKS_KEPT = 50
+let mainTurnOpen = false
+
+// "Agent: Checking locale keys", or "3 agents: <newest> +2".
+export function agentActivity(tasks: readonly string[]): string | null {
+  const newest = tasks[tasks.length - 1]
+  if (newest === undefined) return null
+  return tasks.length === 1 ? `Agent: ${newest}` : `${tasks.length} agents: ${newest} +${tasks.length - 1}`
+}
+
+// A patch that would leave the session idle while its agents work keeps it running.
+function heldByAgents(patch: Partial<Report>): Partial<Report> {
+  const activity = agentActivity([...agentsRunning.values()])
+  return patch.state === 'idle' && activity !== null ? { ...patch, state: 'running', activity } : patch
+}
+
+// The end of a main turn while a subagent's dialog is on show: the dialog
+// stays, and a question the turn left waits under it.
+function underAgentWait(patch: Partial<Report>): Partial<Report> {
+  if (!agentWait) return heldByAgents(patch)
+  if (patch.state === 'waiting' && patch.waiting) agentWait = { ...agentWait, covered: patch.waiting }
+  const { state: _state, waiting: _waiting, ...rest } = patch
+  return rest
+}
 
 export function summarizeInput(tool: string, input: unknown): string {
   const text = pickField(input) ?? tool
@@ -181,30 +217,62 @@ function firstQuestion(input: object): string | null {
   return typeof text === 'string' && text.trim() !== '' ? text : null
 }
 
-function permissionWait(tool: string, input: unknown): Waiting {
+// A subagent's ask names the agent, so the user knows which dialog it is.
+export function permissionWait(tool: string, input: unknown, agentTask: string | null = null): Waiting {
   const summary = summarizeInput(tool, input)
-  const why = summary === tool ? `${PERMISSION_PREFIX}${tool}` : `${PERMISSION_PREFIX}${tool} ${summary}`
+  const asked = summary === tool ? `${PERMISSION_PREFIX}${tool}` : `${PERMISSION_PREFIX}${tool} ${summary}`
+  const why = agentTask === null ? asked : `${asked} · agent ${agentTask}`
   return { kind: 'manual', why, question: why, options: [], recap: '', since: Date.now(), classified: true }
+}
+
+// The newest call under way in a subagent's loop: the one its dialog is for.
+function newestAgentCall(agentId: string): string | null {
+  let newest: string | null = null
+  for (const [callId, agent] of agentCallsUnderWay) if (agent === agentId) newest = callId
+  return newest
+}
+
+async function showWait($: Engine, wait: Waiting, callId: string | null, agentId: string | null): Promise<void> {
+  if (agentId !== null) {
+    const own = current?.state === 'waiting' && current.waiting && !current.waiting.why.startsWith(PERMISSION_PREFIX) ? current.waiting : null
+    agentWait = { callId, agentId, covered: agentWait?.covered ?? own }
+  } else {
+    agentWait = null
+  }
+  await saveReport($, { state: 'waiting', waiting: wait })
 }
 
 // Shows the wait at once for a question to the person, else after the grace
 // period, if the same call has not run, nor started executing, by then.
-async function markPermission($: Engine, tool: string, input: unknown, callId: string | null): Promise<void> {
-  const wait = permissionWait(tool, input)
+// `agentId`: the subagent loop asking, or null for the main loop.
+async function markPermission($: Engine, tool: string, input: unknown, callId: string | null, agentId: string | null = null): Promise<void> {
+  const wait = permissionWait(tool, input, agentId === null ? null : (agentTasks.get(agentId) ?? 'subagent'))
   if (PERSON_TOOLS.has(tool)) {
     pending = null
-    await saveReport($, { state: 'waiting', waiting: wait })
+    await showWait($, wait, callId, agentId)
     return
   }
   permissionSeq += 1
   const seq = permissionSeq
-  pending = { seq, callId, wait }
+  pending = { seq, callId, agentId, wait }
   $.clock.after(PERMISSION_GRACE_MS, () => {
     if (pending?.seq !== seq) return
     pending = null
     if (callId !== null && (callsExecuting.has(callId) || callsFinished.includes(callId))) return
-    void saveReport($, { state: 'waiting', waiting: { ...wait, since: Date.now() } })
+    void showWait($, { ...wait, since: Date.now() }, callId, agentId)
   })
+}
+
+// A subagent's call ran (or its run ended): its wait, pending or on show, is
+// over. What it covered comes back: the main loop's question, else running
+// on the main turn or the agents still at work, else idle.
+async function agentAskSettled($: Engine, settled: (wait: { callId: string | null; agentId: string | null }) => boolean): Promise<void> {
+  if (pending && pending.agentId !== null && settled(pending)) pending = null
+  if (!agentWait || !settled(agentWait) || current?.state !== 'waiting') return
+  const covered = agentWait.covered
+  agentWait = null
+  if (covered) await saveReport($, { state: 'waiting', waiting: covered })
+  else await saveReport($, heldByAgents({ state: mainTurnOpen ? 'running' : 'idle', waiting: null }))
 }
 
 function toPatch(found: Classification, classified: boolean): Partial<Report> {
@@ -224,16 +292,16 @@ async function reportTurnEnd($: Engine, answer: string, isAnswered: boolean): Pr
     aiTitle: await claudeTitle($),
   }
   if (!isAnswered || answer.trim() === '') {
-    await saveReport($, { ...location, state: 'idle', waiting: null })
+    await saveReport($, underAgentWait({ ...location, state: 'idle', waiting: null }))
     return
   }
-  await saveReport($, { ...location, ...toPatch(fallbackClassification(answer), false) })
+  await saveReport($, underAgentWait({ ...location, ...toPatch(fallbackClassification(answer), false) }))
   $.clock.after(0, () => {
     const context = { firstPrompt: current?.title ?? null, claudeTitle: current?.aiTitle ?? null, branch: current?.branch ?? null }
     const topicNow = current?.topic ?? ''
     void classifyTurn($, answer, topicNow, context).then(async found => {
       if (turn !== turnSeq) return
-      await saveReport($, toPatch(found, true))
+      await saveReport($, underAgentWait(toPatch(found, true)))
       await adoptTopic($, stableTopic(current?.topic ?? topicNow, found.topic))
     })
   })
@@ -270,22 +338,63 @@ async function followSessionId($: Engine): Promise<void> {
   if (id !== current.sessionId) await startReport($, current.cwd, id)
 }
 
+// An agent's run starts or ends. Between main turns, the session shows as
+// running on its agents while any works, and idle once the last one is done
+// (unless it waits on the user: that stays).
+async function agentMoved($: Engine): Promise<void> {
+  if (mainTurnOpen || !current) return
+  const activity = agentActivity([...agentsRunning.values()])
+  if (activity !== null && current.state !== 'waiting') await saveReport($, { state: 'running', activity })
+  if (activity === null && current.state === 'running') await saveReport($, { state: 'idle' })
+}
+
 export function registerReporter(on: On): void {
+  // Only to learn what each agent was given to do: its runs say when it works.
+  on('agent.spawn', async ($, e, next) => {
+    const started = await next(e)
+    if (started.agentId !== undefined) {
+      agentTasks.delete(started.agentId)
+      agentTasks.set(started.agentId, e.description.trim() || e.subagentType)
+      if (agentTasks.size > AGENT_TASKS_KEPT) agentTasks.delete(agentTasks.keys().next().value ?? '')
+    }
+    return started
+  })
+
   on('turn.start', async ($, e, next) => {
+    if (e.agentId !== undefined) {
+      agentsRunning.set(e.agentId, agentTasks.get(e.agentId) ?? 'subagent')
+      await agentMoved($)
+    }
     if (e.agentId === undefined) {
+      mainTurnOpen = true
       turnSeq += 1
       await followSessionId($)
       pending = null
       // A title saved before pastes were skipped (a bare paste tag) is no title.
       const saved = current?.title ? firstLine(current.title) : null
       const title = saved ?? firstLine(e.text)
-      await saveReport($, { state: 'running', waiting: null, title })
+      // A subagent's dialog still open stays on show; it no longer covers the question the user just answered.
+      if (agentWait) agentWait = { ...agentWait, covered: null }
+      await saveReport($, agentWait ? { title } : { state: 'running', waiting: null, title })
     }
     return next(e)
   })
 
   on('tool.call', async ($, e, next) => {
-    if (e.agentId !== undefined) return next(e)
+    const agentId = e.agentId
+    if (agentId !== undefined) {
+      const callId = e.tool_use_id
+      agentCallsUnderWay.set(callId, agentId)
+      try {
+        return await next(e)
+      } finally {
+        agentCallsUnderWay.delete(callId)
+        callsExecuting.delete(callId)
+        callsFinished.push(callId)
+        if (callsFinished.length > FINISHED_KEPT) callsFinished.shift()
+        await agentAskSettled($, wait => wait.callId === callId || (wait.callId === null && wait.agentId === agentId))
+      }
+    }
     const activity = `${e.tool}: ${summarizeInput(e.tool, e)}`
     if (current) current = { ...current, activity, steps: [...(current.steps ?? []), activity].slice(-STEPS_KEPT) }
     if (Date.now() - lastWrite >= ACTIVITY_WRITE_MS) await saveReport($, {})
@@ -298,8 +407,9 @@ export function registerReporter(on: On): void {
       callsExecuting.delete(callId)
       callsFinished.push(callId)
       if (callsFinished.length > FINISHED_KEPT) callsFinished.shift()
-      if (pending?.callId === callId || pending?.callId === null) pending = null
-      if (current?.state === 'waiting') await saveReport($, { state: 'running', waiting: null })
+      if (pending?.agentId === null && (pending.callId === callId || pending.callId === null)) pending = null
+      // A subagent's open dialog is not this call's: it stays on show.
+      if (current?.state === 'waiting' && !agentWait) await saveReport($, { state: 'running', waiting: null })
     }
   })
 
@@ -314,8 +424,8 @@ export function registerReporter(on: On): void {
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
     const asksPerson = verdict.decision === 'ask' && e.approver === 'person' && e.tool_use_id !== undefined
-    if (asksPerson && e.agentId === undefined && !classicHooksRun) {
-      await markPermission($, e.tool, e.input, e.tool_use_id ?? null)
+    if (asksPerson && !classicHooksRun) {
+      await markPermission($, e.tool, e.input, e.tool_use_id ?? null, e.agentId ?? null)
     }
     return verdict
   })
@@ -323,11 +433,14 @@ export function registerReporter(on: On): void {
   // Fires when a dialog is raised, where no other plugin answers it first (a
   // security plugin may: the tool.check above covers that). In auto mode it
   // can fire while the classifier still decides, hence the grace period. It
-  // names no call: the main loop's newest one is the one asking.
+  // names no call: the asking loop's newest one is the one asking. A
+  // subagent's dialog, background ones included, waits on the user as much.
   on('classic.PermissionRequest', async ($, e, next) => {
     classicHooksRun = true
     if (e.agent_id === undefined) {
       await markPermission($, e.tool_name, e.tool_input, callsUnderWay[callsUnderWay.length - 1] ?? null)
+    } else {
+      await markPermission($, e.tool_name, e.tool_input, newestAgentCall(e.agent_id), e.agent_id)
     }
     return next(e)
   })
@@ -340,21 +453,37 @@ export function registerReporter(on: On): void {
     if (callsUnderWay.includes(callId) && !callsExecuting.has(callId)) {
       callsExecuting.add(callId)
       if (pending?.callId === callId) pending = null
-      if (current?.state === 'waiting' && current.waiting?.why.startsWith(PERMISSION_PREFIX)) {
+      if (current?.state === 'waiting' && current.waiting?.why.startsWith(PERMISSION_PREFIX) && !agentWait) {
         $.clock.after(0, () => void saveReport($, { state: 'running', waiting: null }))
       }
+    }
+    if (agentCallsUnderWay.has(callId) && !callsExecuting.has(callId)) {
+      callsExecuting.add(callId)
+      $.clock.after(0, () => void agentAskSettled($, wait => wait.callId === callId))
     }
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
-    if (e.agentId === undefined && current) await reportTurnEnd($, e.answer, !e.isAborted && e.reason === 'answer')
+    const agentId = e.agentId
+    if (agentId !== undefined) {
+      agentsRunning.delete(agentId)
+      await agentAskSettled($, wait => wait.agentId === agentId)
+      await agentMoved($)
+    } else {
+      mainTurnOpen = false
+      if (current) await reportTurnEnd($, e.answer, !e.isAborted && e.reason === 'answer')
+    }
     return result
   })
 
   on('session.end', async ($, e, next) => {
     turnSeq += 1 // drops a classification still on its way
+    agentsRunning.clear()
+    agentCallsUnderWay.clear()
+    agentWait = null
+    mainTurnOpen = false
     await saveReport($, { state: 'ended', waiting: null })
     return next(e)
   })

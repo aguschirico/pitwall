@@ -1,14 +1,15 @@
 import { expect, mock, test, type TestBody } from 'claude-code/testing'
 
 import { parseReport, serializeReport, type Report } from '../src/report'
-import { PERMISSION_GRACE_MS, summarizeInput } from '../src/reporter'
+import { agentActivity, PERMISSION_GRACE_MS, permissionWait, summarizeInput } from '../src/reporter'
 
 const DIR = '/h/.claude/pitwall/reports'
 
 type TestOn = Parameters<TestBody>[1]
 // `ask`: every call stays under way askMs (the classifier or the person
 // deciding), then runs runMs. The test raises the ask while it is under way.
-type Options = { clock?: boolean; ask?: { askMs: number; runMs?: number }; failWrites?: boolean; ids?: string[]; branches?: string[]; existing?: Report }
+// `agentCallMs`: a subagent's call stays under way that long (its dialog open).
+type Options = { clock?: boolean; ask?: { askMs: number; runMs?: number }; agentCallMs?: number; failWrites?: boolean; ids?: string[]; branches?: string[]; existing?: Report }
 
 // Stands for the engine beneath the reporter and keeps every report it writes.
 function engine(on: TestOn, options: Options = {}) {
@@ -52,10 +53,14 @@ function engine(on: TestOn, options: Options = {}) {
       return { result: {} }
     })
   } else {
-    on('tool.call', () => ({ result: {} }))
+    const agentCallMs = options.agentCallMs
+    on('tool.call', async (_, e) => {
+      if (agentCallMs !== undefined && clock && e.agentId !== undefined) await clock.sleep(agentCallMs)
+      return { result: {} }
+    })
   }
   // A call that asks inside it gets past the check: its tool hook raises the ask.
-  on('tool.check', () => ({ decision: options.ask ? 'allow' : 'ask' }))
+  on('tool.check', (_, e) => ({ decision: options.ask || (options.agentCallMs !== undefined && e.agentId !== undefined) ? 'allow' : 'ask' }))
   on('classic.PermissionRequest', () => ({}))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
@@ -156,13 +161,6 @@ test('the tool call that was asked for brings the session back to running', asyn
   expect(seen.last()?.waiting).toBe(null)
 })
 
-test('a subagent permission does not mark the session as waiting', async ($, on) => {
-  const seen = engine(on)
-  await $.session.start(START)
-  await $.classic.PermissionRequest({ ...ASK, agent_id: 'a1' })
-
-  expect(seen.last()?.state).toBe('running')
-})
 
 test('an ended session reports ended', async ($, on) => {
   const seen = engine(on)
@@ -365,4 +363,150 @@ test('a prompt that is only a paste leaves the title for later', async ($, on) =
   await $.turn.start({ text: '<pasted_content id="ad6e">\nERROR deadlock on orders\n</pasted_content>', turnId: 't1' })
 
   expect(seen.last()?.title).toBe(null)
+})
+
+const NOTHING_ASKED = JSON.stringify({ kind: 'none', why: '', question: '', options: [], recap: 'sent the agent back', topic: '' })
+const ASKS = JSON.stringify({ kind: 'decision', why: 'elegir A o B', question: '¿A o B?', options: ['A', 'B'], recap: '', topic: '' })
+
+// The engine beneath, plus a subagent spawn and a classifier that answers `reply`.
+function withAgents(on: TestOn, reply: string, agentCallMs?: number) {
+  const seen = engine(on, { clock: true, ...(agentCallMs === undefined ? {} : { agentCallMs }) })
+  on('agent.spawn', () => ({ model: 'haiku', agentId: 'a1' }))
+  const usage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
+  on('model.complete', () => ({ value: { isAnswered: true, text: reply, usage } }))
+  return seen
+}
+
+// A background Agent call as the engine raises it.
+function spawn(description: string) {
+  return {
+    tool_use_id: 'tu-agent',
+    prompt: 'p',
+    description,
+    subagentType: 'general-purpose',
+    provider: { plugin: 'engine', tier: 'core' },
+    parentModel: 'claude-opus-5-5',
+    background: true,
+    fork: false,
+  } as const
+}
+
+const END = { durationMs: 1, isAborted: false, reason: 'answer' } as const
+
+test('a background agent keeps the session running after its turn ends asking nothing, idle once it is done', async ($, on) => {
+  const seen = withAgents(on, NOTHING_ASKED)
+  await $.session.start(START)
+  await $.turn.start({ text: 'arreglá los warnings', turnId: 't1' })
+  await $.agent.spawn(spawn('Fix Finance warnings'))
+  await $.turn.start({ text: 'fix the warnings', turnId: 'ta', agentId: 'a1' })
+  await $.turn.complete({ ...END, answer: 'Le devolví al agente los hallazgos.', turnId: 't1' })
+  await seen.clock?.advance(1)
+
+  expect(seen.last()?.state).toBe('running')
+  expect(seen.last()?.activity).toBe('Agent: Fix Finance warnings')
+
+  await $.turn.complete({ ...END, answer: 'done', turnId: 'ta', agentId: 'a1' })
+  expect(seen.last()?.state).toBe('idle')
+})
+
+test('a session waiting on the user stays waiting while its agents work and when they finish', async ($, on) => {
+  const seen = withAgents(on, ASKS)
+  await $.session.start(START)
+  await $.turn.start({ text: 'seguí', turnId: 't1' })
+  await $.agent.spawn(spawn('Check locale keys'))
+  await $.turn.start({ text: 'p', turnId: 'ta', agentId: 'a1' })
+  await $.turn.complete({ ...END, answer: '¿A o B?', turnId: 't1' })
+  await seen.clock?.advance(1)
+  expect(seen.last()?.state).toBe('waiting')
+
+  await $.turn.complete({ ...END, answer: 'done', turnId: 'ta', agentId: 'a1' })
+  expect(seen.last()?.state).toBe('waiting')
+  expect(seen.last()?.waiting?.question).toBe('¿A o B?')
+})
+
+test('an agent that starts while the session is idle brings it back to running', async ($, on) => {
+  const seen = withAgents(on, NOTHING_ASKED)
+  await $.session.start(START)
+  await $.turn.start({ text: 'hola', turnId: 't1' })
+  await $.turn.complete({ ...END, answer: 'listo', turnId: 't1' })
+  await seen.clock?.advance(1)
+  expect(seen.last()?.state).toBe('idle')
+
+  await $.agent.spawn(spawn('Code quality review'))
+  await $.turn.start({ text: 'p', turnId: 'ta', agentId: 'a1' })
+  expect(seen.last()?.state).toBe('running')
+  expect(seen.last()?.activity).toBe('Agent: Code quality review')
+})
+
+test('agents under way read as one line', async () => {
+  expect(agentActivity([])).toBe(null)
+  expect(agentActivity(['Fix warnings'])).toBe('Agent: Fix warnings')
+  expect(agentActivity(['Fix warnings', 'Review', 'Check keys'])).toBe('3 agents: Check keys +2')
+})
+
+// A background agent's call left under way 30s (its dialog open), and a main turn that ended.
+async function agentAsking($: Parameters<TestBody>[0], on: TestOn, reply: string) {
+  const seen = withAgents(on, reply, 30_000)
+  await $.session.start(START)
+  await $.turn.start({ text: 'arreglá los warnings', turnId: 't1' })
+  await $.agent.spawn(spawn('Fix Finance warnings'))
+  await $.turn.start({ text: 'p', turnId: 'ta', agentId: 'a1' })
+  await $.turn.complete({ ...END, answer: 'Le devolví al agente los hallazgos.', turnId: 't1' })
+  await seen.clock?.advance(1)
+  const call = $.tool.call({ tool: 'Bash', command: 'git push origin feat/x', agentId: 'a1' })
+  await seen.clock?.settle()
+  await $.classic.PermissionRequest({ ...ASK, agent_id: 'a1' })
+  return { seen, call }
+}
+
+test('a background agent\'s permission dialog waits on the user, naming the agent, and clears when its call runs', async ($, on) => {
+  const { seen, call } = await agentAsking($, on, NOTHING_ASKED)
+  expect(seen.last()?.state).toBe('running')
+  await seen.clock?.advance(PERMISSION_GRACE_MS)
+  expect(seen.last()?.state).toBe('waiting')
+  expect(seen.last()?.waiting?.why).toBe('Permission: Bash git push origin feat/x · agent Fix Finance warnings')
+
+  await seen.clock?.advance(30_000)
+  await call
+  expect(seen.last()?.state).toBe('running')
+  expect(seen.last()?.activity).toBe('Agent: Fix Finance warnings')
+})
+
+test('the main loop\'s question comes back once the agent\'s dialog is settled', async ($, on) => {
+  const { seen, call } = await agentAsking($, on, ASKS)
+  await seen.clock?.advance(PERMISSION_GRACE_MS)
+  expect(seen.last()?.waiting?.why.endsWith('· agent Fix Finance warnings')).toBe(true)
+
+  await seen.clock?.advance(30_000)
+  await call
+  expect(seen.last()?.state).toBe('waiting')
+  expect(seen.last()?.waiting?.question).toBe('¿A o B?')
+})
+
+test('a main loop call that finishes leaves an agent\'s open dialog on show', async ($, on) => {
+  const { seen, call } = await agentAsking($, on, NOTHING_ASKED)
+  await seen.clock?.advance(PERMISSION_GRACE_MS)
+  await $.turn.start({ text: 'mientras tanto mirá el README', turnId: 't2' })
+  await $.tool.call({ tool: 'Read', file_path: '/repo/README.md' })
+  expect(seen.last()?.state).toBe('waiting')
+  expect(seen.last()?.waiting?.why.endsWith('· agent Fix Finance warnings')).toBe(true)
+
+  await seen.clock?.advance(30_000)
+  await call
+  expect(seen.last()?.state).toBe('running')
+})
+
+test('an agent whose run ends drops its wait', async ($, on) => {
+  const { seen, call } = await agentAsking($, on, NOTHING_ASKED)
+  await seen.clock?.advance(PERMISSION_GRACE_MS)
+  expect(seen.last()?.state).toBe('waiting')
+  await $.turn.complete({ ...END, answer: '', turnId: 'ta', agentId: 'a1', isAborted: true, reason: 'aborted' })
+  expect(seen.last()?.state).toBe('idle')
+  await seen.clock?.advance(30_000)
+  await call
+})
+
+test('a main loop permission names no agent', async () => {
+  expect(permissionWait('Bash', { command: 'git push' }).why).toBe('Permission: Bash git push')
+  expect(permissionWait('Bash', { command: 'git push' }, 'Review').why).toBe('Permission: Bash git push · agent Review')
 })

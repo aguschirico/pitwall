@@ -205,7 +205,7 @@ marketplace, it goes to the debug log (`claude --debug`) alone.
 ## Development
 
 ```
-claude plugin test .       # 285 tests
+claude plugin test .       # 293 tests
 claude plugin validate .   # what the engine would accept
 claude --plugin-dir .      # try it without installing
 ```

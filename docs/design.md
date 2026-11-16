@@ -166,6 +166,16 @@ few steps, the options it offered, and where and how to answer.
   session, that fallback is on; after, only PermissionRequest marks waits, since `tool.check`
   cannot tell a dialog from auto mode's classifier. There is no probe on `classic.PreToolUse`: a
   managed plugin that sends it past the mod got the user a skip notice for nothing (issue #1).
+- **Background agents.** A subagent run starts and ends as a `turn.start` / `turn.complete`
+  carrying its `agentId`; `agent.spawn` gives its description. While one is under way, a main turn
+  that ends asking nothing leaves the session **running** on `Agent: <description>` (or
+  `3 agents: <newest> +2`), not idle, and the last one to finish leaves it idle. A wait on the user
+  stays a wait either way.
+- **A subagent's permission dialog is a wait too**, background agents included: `Permission: Bash
+  git push · agent <description>`, after the same grace period. Its calls are tracked per agent, so
+  the dialog is tied to that agent's newest call and clears when that call runs or the agent's run
+  ends; a main loop call finishing does not clear it. A question the main turn left under it
+  comes back once it settles.
 - **Fallback** for sessions without a report: the registry's `idle` status plus the last assistant
   message in the transcript.
 - The model runs only when a turn ends. The "running" line comes from cheap data: title, last tool,
