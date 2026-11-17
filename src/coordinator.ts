@@ -15,6 +15,7 @@ import { computeSnapshot, readSnapshot, type Snapshot } from './snapshot'
 import { nudgeStuck } from './nudge'
 import { closedWindowMs, DEFAULT_REFRESH_S, notifiesStuck, stuckAfterMs } from './settings'
 import { registerTools } from './tools'
+import { ownVersion } from './version'
 
 type Engine = Parameters<Hook<'session.start'>>[0]
 
@@ -78,7 +79,14 @@ async function refreshOnce($: Engine): Promise<void> {
     now,
     closedWindowMs: closedWindowMs(),
   })
-  const view = toView(lastFronts, now, { pr: snapshot.pr, git: snapshot.git, mainLines: snapshot.mainLines, stuckAfter: stuckAfterMs() })
+  const view = toView(lastFronts, now, {
+    pr: snapshot.pr,
+    git: snapshot.git,
+    mainLines: snapshot.mainLines,
+    stuckAfter: stuckAfterMs(),
+    installed: snapshot.installed,
+    ownVersion: await ownVersion($),
+  })
   rowNumbers = assignNumbers(rowNumbers, drawnRows(view))
   const panel = withNumbers(view, rowNumbers)
   await setView($, panel)

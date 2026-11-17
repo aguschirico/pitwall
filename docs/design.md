@@ -214,6 +214,18 @@ most once a minute, the snapshot keeping when it was fetched (`prAt`) so the nex
   ssh in batch mode unless the repo or the user set `core.sshCommand`. No FETCH_HEAD is written, so
   a session's own fetch or pull is not raced; only `refs/remotes/origin/main` moves.
 
+### Versions
+
+- A session runs the pitwall it loaded at start; an update reaches it only on a restart. The
+  reporter writes the version from the `plugin.json` beside its code (`$.plugin.root`) into the
+  report as `pluginVersion`, read anew at every start.
+- The snapshot writer reads the installed version from Claude Code's `installed_plugins.json`
+  (the newest `pitwall@*` entry). A row whose open, reporting session runs an older version, or a
+  report with no version at all (written before reports carried it), gets an amber line asking for
+  `/restart`. A session ahead of the installed one (a plugin folder in development) is not flagged,
+  and with no installed version to read nothing is.
+- The panel's own session is left out of its rows, so its own lag shows on top of the pane.
+
 ### Portability
 
 - Nothing repo specific: paths under `~/.claude` (or the folder `CLAUDE_CONFIG_DIR` names, where Claude Code keeps the registry and transcripts of that config) and what the transcripts carry.

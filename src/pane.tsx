@@ -17,12 +17,12 @@ type Engine = Parameters<Hook<'ui.render'>>[0]
 export const PANE_ID = 'pitwall'
 export const PANE_TITLE = 'Pitwall'
 
-const EMPTY: PanelView = { waiting: [], running: [], idle: [], closed: [], mains: [] }
+const EMPTY: PanelView = { waiting: [], running: [], idle: [], closed: [], mains: [], update: null }
 const DEFAULT_ROWS = 40
 
 // Change a tag when its value's fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-12' })
+const view = atom({ plugin: 'pitwall', key: 'view' } as const, EMPTY, { shape: 'view-13' })
 const selected = atom({ plugin: 'pitwall', key: 'selected' } as const, null, { shape: 'selected-1' })
 const gitOpen = atom({ plugin: 'pitwall', key: 'gitOpen' } as const, null, { shape: 'git-open-1' })
 
@@ -148,8 +148,10 @@ async function drawPanel($: Engine, els: Elements, rows: number) {
             </Box>
           </Box>
         ))
+  const notice = panel.update ? [<Text key="update" color="warning">{panel.update}</Text>] : []
   const list = (
     <Box flexDirection="column" height={gitRow ? Math.floor(rows / 2) : undefined} overflow={gitRow ? 'hidden' : undefined}>
+      {notice}
       {body}
     </Box>
   )

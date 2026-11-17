@@ -11,6 +11,7 @@ import { claudeHomeOf } from './paths'
 import { parseTail, transcriptPath } from './registry'
 import { cutMessage, parseReport, PERMISSION_PREFIX, reportPath, serializeReport, type Report, type TerminalInfo, type Waiting } from './report'
 import { cutAtWord } from './untrusted'
+import { ownVersion } from './version'
 
 type Engine = Parameters<Hook<'session.start'>>[0]
 
@@ -179,6 +180,7 @@ export async function startReport($: Engine, cwd: string, sessionId?: string): P
       lastMessage: null,
       steps: [],
       terminal: await terminalOf($),
+      pluginVersion: await ownVersion($),
     }
     const before = await earlierReport($, id)
     // Only where the session is, and how to reach its terminal, are read anew:

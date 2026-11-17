@@ -59,6 +59,10 @@ local main even with origin/main · fetched 1m ago
   `main` against `origin/main`. The panel fetches `origin/main` itself, at most every 5 minutes per
   repository and never with a prompt (a fetch that would ask for a password or passphrase just
   fails, and the line says so), so "behind" means behind what is on the remote now.
+- **Sessions on an older pitwall**: an open session keeps the pitwall it started with until it
+  restarts, so `claude plugin update` does not reach it. The panel marks each one still on an
+  older version (`Older pitwall 0.1.22: /restart it for 0.1.23`), and says so on top when the
+  panel's own session is one of them.
 - **Row buttons**, on a line under each row, open or closed: **↪ Go** brings that session's
   terminal tab to the front (Ghostty, iTerm2 and Terminal.app by tty; tmux, kitty and WezTerm
   through their remote control), so an OK push is one press away. **▸ Git** opens the branch below,
@@ -205,7 +209,7 @@ marketplace, it goes to the debug log (`claude --debug`) alone.
 ## Development
 
 ```
-claude plugin test .       # 293 tests
+claude plugin test .       # 302 tests
 claude plugin validate .   # what the engine would accept
 claude --plugin-dir .      # try it without installing
 ```

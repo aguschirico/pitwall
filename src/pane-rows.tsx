@@ -126,6 +126,11 @@ export function frontRow(els: Elements, row: PanelRow, look: RowLook, actions: R
           <Text color={row.git?.warn ? 'warning' : undefined} dimColor={!row.git?.warn}>{row.summary}</Text>
         </Box>
       )}
+      {row.restart && (
+        <Box paddingLeft={4}>
+          <Text color="warning">{row.restart}</Text>
+        </Box>
+      )}
       {row.detail && (
         <Box paddingLeft={4}>
           <Text>{row.detail}</Text>

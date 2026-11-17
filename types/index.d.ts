@@ -45,6 +45,8 @@ export type PanelRow = {
   // Waiting on the user for longer than their threshold: the age is a badge.
   stuck: boolean
   summary: string
+  // A session of the front runs an older pitwall: the line asking for a restart.
+  restart: string | null
   detail: string | null
   activity: string | null
   // What the session last said and its last steps: the context an open row shows.
@@ -65,7 +67,8 @@ export type PanelSections = { waiting: PanelRow[]; running: PanelRow[]; idle: Pa
 // label, null on a panel of one repository. `warn`: far behind or not fetching.
 export type PanelMain = { repo: string | null; text: string; warn: boolean }
 
-export type PanelView = PanelSections & { mains: PanelMain[] }
+// `update`: the panel's own session runs an older pitwall than the installed one.
+export type PanelView = PanelSections & { mains: PanelMain[]; update: string | null }
 
 export type Selected = string | null
 

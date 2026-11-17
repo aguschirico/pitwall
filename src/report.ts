@@ -50,6 +50,8 @@ export type Report = {
   // The title Claude Code gave the conversation: what the terminal tab shows.
   aiTitle?: string | null
   terminal?: TerminalInfo | null
+  // The pitwall version the session loaded: it keeps it until it restarts.
+  pluginVersion?: string | null
 }
 
 const WAIT_KINDS: readonly string[] = ['decision', 'ok-push', 'manual', 'review']
@@ -119,6 +121,7 @@ function isReport(value: unknown): value is Report {
     typeof value.updatedAt === 'number' &&
     isStringOrNull(value.lastMessage) &&
     (value.terminal === undefined || value.terminal === null || isRecord(value.terminal)) &&
+    (value.pluginVersion === undefined || isStringOrNull(value.pluginVersion)) &&
     Array.isArray(value.steps) &&
     value.steps.every(step => typeof step === 'string')
   )

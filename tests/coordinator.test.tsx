@@ -74,6 +74,8 @@ type World = {
   filled?: string[]
   noBox?: boolean
   draft?: string
+  // The coordinator session's own plugin.json, read from its plugin folder.
+  manifest?: string
 }
 
 function processAnswer(world: World, argv: readonly string[]): Ran {
@@ -111,7 +113,7 @@ function engine(on: TestOn, world: World): MockClock {
       .map(path => ({ name: path.slice(e.path.length + 1), kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false }))
     return { value: names }
   })
-  on('fs.read', (_, e) => ({ value: world.files[e.path] ?? '' }))
+  on('fs.read', (_, e) => ({ value: e.path.endsWith('/.claude-plugin/plugin.json') ? world.manifest ?? '' : world.files[e.path] ?? '' }))
   on('process.run', async (_, e) => {
     world.runs.push([...e.argv])
     if (e.argv[0] === 'ps' && world.failPs) throw new Error('ps missing')
@@ -1263,5 +1265,25 @@ test('with closedDays at 3 a closed front of two days still shows', { options: {
   await clock.settle()
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /^Closed · 1$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+const INSTALLED = `${HOME}/.claude/plugins/installed_plugins.json`
+
+test('a session on an older pitwall than the installed one asks for a restart, and so does the panel', async ($, on) => {
+  const seen = world()
+  seen.files[INSTALLED] = JSON.stringify({ version: 2, plugins: { 'pitwall@aguschirico': [{ scope: 'user', version: '0.1.23' }] } })
+  seen.files[`${REPORTS}/docs.json`] = serializeReport({ ...DOCS, pluginVersion: '0.1.22' })
+  seen.files[`${REPORTS}/search.json`] = serializeReport({ ...SEARCH, pluginVersion: '0.1.23' })
+  seen.manifest = '{"name":"pitwall","version":"0.1.22"}'
+  const clock = engine(on, seen)
+  await openPanel($)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect(JSON.parse(seen.files[SNAPSHOT] ?? '{}').installed).toBe('0.1.23')
+  expect(await ui.find({ type: 'Text', text: 'Older pitwall 0.1.22: /restart it for 0.1.23' })).toBeDefined()
+  expect(await ui.findAll({ type: 'Text', text: /Older pitwall/ })).toHaveLength(1)
+  expect(await ui.find({ type: 'Text', text: 'This panel runs pitwall 0.1.22: /restart here for 0.1.23' })).toBeDefined()
   await ui.unmount()
 })

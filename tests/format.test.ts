@@ -280,3 +280,32 @@ test('the view carries each repository\'s main line, flagged when far behind', a
   expect(view.mains).toEqual([{ repo: null, text: 'local main 30 behind origin/main · fetched 2m ago', warn: true }])
   expect(toView([one], NOW).mains).toEqual([])
 })
+
+// A front whose one session runs `running`, open or closed, reported or read from its transcript.
+const onVersion = (running: string | undefined, open = true, reported = true): Front => {
+  const base = front(null, reported)
+  const [one] = base.sessions
+  if (!one) return base
+  const report: Report = { ...one.report, ...(running === undefined ? {} : { pluginVersion: running }) }
+  return { ...base, sessions: [{ ...one, report, live: open ? one.live : null }] }
+}
+
+test('a session on an older pitwall asks for a restart, naming both versions', async () => {
+  const [row] = toView([onVersion('0.1.22')], NOW, { installed: '0.1.23' }).running
+  expect(row?.restart).toBe('Older pitwall 0.1.22: /restart it for 0.1.23')
+  const [unknown] = toView([onVersion(undefined)], NOW, { installed: '0.1.23' }).running
+  expect(unknown?.restart).toBe('Older pitwall: /restart it for 0.1.23')
+})
+
+test('a session on the installed pitwall, a closed one or one without a reporter asks nothing', async () => {
+  expect(toView([onVersion('0.1.23')], NOW, { installed: '0.1.23' }).running[0]?.restart).toBe(null)
+  expect(toView([onVersion('0.1.22')], NOW).running[0]?.restart).toBe(null)
+  expect(toView([onVersion('0.1.22', false)], NOW, { installed: '0.1.23' }).running[0]?.restart).toBe(null)
+  expect(toView([onVersion(undefined, true, false)], NOW, { installed: '0.1.23' }).running[0]?.restart).toBe(null)
+})
+
+test('a panel on an older pitwall says so on top', async () => {
+  expect(toView([], NOW, { installed: '0.1.23', ownVersion: '0.1.22' }).update).toBe('This panel runs pitwall 0.1.22: /restart here for 0.1.23')
+  expect(toView([], NOW, { installed: '0.1.23', ownVersion: '0.1.23' }).update).toBe(null)
+  expect(toView([], NOW, { installed: '0.1.23', ownVersion: null }).update).toBe(null)
+})

@@ -30,6 +30,7 @@ function engine(on: TestOn, options: Options = {}) {
     return { value: { exitCode: 0, stdout: `${branch}\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('fs.read', (_, e) => {
+    if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: '{"name":"pitwall","version":"0.1.23"}' }
     if (options.existing && e.path === `${DIR}/${options.existing.sessionId}.json`) {
       return { value: serializeReport(options.existing) }
     }
@@ -78,6 +79,16 @@ test('a started session reports running on its branch', async ($, on) => {
   expect(seen.last()?.state).toBe('running')
   expect(seen.last()?.branch).toBe('feat/x')
   expect(seen.last()?.repoRoot).toBe('/repo')
+  expect(seen.last()?.pluginVersion).toBe('0.1.23')
+})
+
+test('a restart writes the version it loaded over the one an older pitwall left', async ($, on) => {
+  const existing: Report = { v: 1, sessionId: 's1', cwd: '/repo', repoRoot: '/repo', branch: 'feat/x', title: 'X', activity: null, state: 'idle', waiting: null, updatedAt: 1, pluginVersion: '0.1.22' }
+  const seen = engine(on, { existing })
+  await $.session.start(START)
+
+  expect(seen.last()?.pluginVersion).toBe('0.1.23')
+  expect(seen.last()?.title).toBe('X')
 })
 
 test('a non interactive session writes no report', async ($, on) => {

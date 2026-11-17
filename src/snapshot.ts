@@ -14,6 +14,7 @@ import { dismissFronts, readOverrides } from './overrides'
 import { branchGone, fetchPr, type PrChip } from './pr'
 import { inferReport, parseLive, readLiveSessions, readReports, type Io, type LiveSession } from './registry'
 import { parseReport, reportPath, type Report } from './report'
+import { readInstalledVersion } from './version'
 
 type Engine = Parameters<Hook<'session.start'>>[0]
 
@@ -34,6 +35,8 @@ export type Snapshot = {
   // tree, and when the panel last fetched origin's main there.
   mainLines: Record<string, MainLine | null>
   fetches: Record<string, FetchRecord>
+  // The pitwall Claude Code has installed: a session on an older one needs a restart.
+  installed: string | null
 }
 
 export function snapshotPath(claudeHome: string): string {
@@ -47,6 +50,10 @@ function field(value: unknown, key: string): unknown {
 function listOf<T>(value: unknown, parse: (text: string) => T | null): T[] {
   if (!Array.isArray(value)) return []
   return value.map(item => parse(JSON.stringify(item))).filter((item): item is T => item !== null)
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' ? value : null
 }
 
 function recordOf<T>(value: unknown): Record<string, T> {
@@ -76,6 +83,7 @@ export function parseSnapshot(text: string): Snapshot | null {
     git: recordOf<GitInfo | null>(field(data, 'git')),
     mainLines: recordOf<MainLine | null>(field(data, 'mainLines')),
     fetches: recordOf<FetchRecord>(field(data, 'fetches')),
+    installed: stringOrNull(field(data, 'installed')),
   }
 }
 
@@ -166,6 +174,7 @@ export async function computeSnapshot($: Engine, io: Io, claudeHome: string, now
     git: Object.fromEntries(judged.map(one => [one.front.id, one.git])),
     mainLines,
     fetches,
+    installed: await readInstalledVersion(io, claudeHome),
   }
   await $.fs.write(snapshotPath(claudeHome), JSON.stringify(snapshot))
   return snapshot

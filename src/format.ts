@@ -7,6 +7,7 @@ import type { MainLine } from './mainline'
 import type { PrChip } from './pr'
 import type { WaitKind } from './report'
 import { DEFAULT_STUCK_MIN } from './settings'
+import { isBehind } from './version'
 
 export const TAG: Record<WaitKind, string> = {
   decision: 'Decision',
@@ -195,6 +196,24 @@ export type ViewExtras = {
   git?: Record<string, GitInfo | null>
   mainLines?: Record<string, MainLine | null>
   stuckAfter?: number | null
+  // The pitwall installed, and the one the panel's own session runs.
+  installed?: string | null
+  ownVersion?: string | null
+}
+
+// An open session of the front still on an older pitwall: what it runs, and
+// that a restart loads the installed one.
+export function restartWords(front: Front, installed: string | null): string | null {
+  const behind = front.sessions.find(one => one.live !== null && one.reported && isBehind(one.report.pluginVersion, installed))
+  if (!behind || installed === null) return null
+  const running = behind.report.pluginVersion ? ` ${behind.report.pluginVersion}` : ''
+  return `Older pitwall${running}: /restart it for ${installed}`
+}
+
+// The panel's own session on an older pitwall than the installed one.
+export function updateWords(own: string | null, installed: string | null): string | null {
+  if (own === null || installed === null || !isBehind(own, installed)) return null
+  return `This panel runs pitwall ${own}: /restart here for ${installed}`
 }
 
 // The branch, when the row's name is not already it (a topic or a rename).
@@ -330,6 +349,7 @@ export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): P
       tag: waitsOnPr ? 'PR' : line.tag,
       detail: waitsOnPr ?? line.detail,
       summary: summaryLine(pr, git, reported, ownBranchShown(front)),
+      restart: restartWords(front, extras.installed ?? null),
       message: speaker(front)?.report.lastMessage ?? null,
       steps: speaker(front)?.report.steps ?? [],
       drill: drillDown(front),
@@ -344,6 +364,7 @@ export function toView(fronts: Front[], now: number, extras: ViewExtras = {}): P
   const of = (section: Front['section']) => rows.filter(one => one.front.section === section && !waitsOnPr(one)).map(one => one.row)
   return {
     mains: mainsOf(fronts, groups, extras.mainLines ?? {}, now),
+    update: updateWords(extras.ownVersion ?? null, extras.installed ?? null),
     waiting: byRepo([...of('waiting'), ...rows.filter(waitsOnPr).map(one => one.row)]),
     running: byRepo(of('running')),
     idle: byRepo(of('idle')),
